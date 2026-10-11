@@ -45,9 +45,11 @@ test.before(async () => {
 
 let orderNo;
 
+const STORE = { subType: 'UNIMARTC2C', id: '131386', name: '7-ELEVEN 信義門市', address: '台北市信義區松仁路100號' };
+
 test('結帳以資料庫價格計算金額，不採用前端金額', async () => {
   const res = mockRes();
-  await checkout(req({ items: [{ id: 'NAIL_0001', size: 'S', quantity: 1 }], total: 1, name: '王小美', phone: '0912345678', address: '台北市信義區' }, { authorization: 'Bearer buyer-token' }), res);
+  await checkout(req({ items: [{ id: 'NAIL_0001', size: 'S', quantity: 1 }], total: 1, name: '王小美', phone: '0912345678', store: STORE }, { authorization: 'Bearer buyer-token' }), res);
   assert.strictEqual(res.statusCode, 200, JSON.stringify(res.body));
   assert.strictEqual(formValue(res.body, 'TotalAmount'), '550'); // 490 + 運費 60
   orderNo = formValue(res.body, 'MerchantTradeNo');
@@ -62,10 +64,10 @@ test('結帳以資料庫價格計算金額，不採用前端金額', async () =>
 
 test('超過庫存或下架商品無法結帳', async () => {
   const res = mockRes();
-  await checkout(req({ items: [{ id: 'NAIL_0001', size: 'M', quantity: 2 }], name: '王小美', phone: '0912345678', address: '台北' }), res);
+  await checkout(req({ items: [{ id: 'NAIL_0001', size: 'M', quantity: 2 }], name: '王小美', phone: '0912345678', store: STORE }), res);
   assert.strictEqual(res.statusCode, 409);
   const res2 = mockRes();
-  await checkout(req({ items: [{ id: 'NAIL_0002', size: 'S', quantity: 1 }], name: '王小美', phone: '0912345678', address: '台北' }), res2);
+  await checkout(req({ items: [{ id: 'NAIL_0002', size: 'S', quantity: 1 }], name: '王小美', phone: '0912345678', store: STORE }), res2);
   assert.strictEqual(res2.statusCode, 409);
 });
 
@@ -105,7 +107,7 @@ test('付款成功扣庫存；重送的通知不會重複扣', async () => {
 
 test('金額不符的通知不扣庫存並標記人工確認', async () => {
   const res = mockRes();
-  await checkout(req({ items: [{ id: 'NAIL_0001', size: 'M', quantity: 1 }], name: '王小美', phone: '0912345678', address: '台北' }), res);
+  await checkout(req({ items: [{ id: 'NAIL_0001', size: 'M', quantity: 1 }], name: '王小美', phone: '0912345678', store: STORE }), res);
   const no = formValue(res.body, 'MerchantTradeNo');
   const res2 = mockRes();
   await webhook(req(signed({ MerchantID: '3002607', MerchantTradeNo: no, RtnCode: '1', TradeAmt: '1', PaymentType: 'Credit_CreditCard', SimulatePaid: '0' })), res2);
@@ -145,7 +147,7 @@ test('試算：以資料庫價格計算，無效優惠碼會回報', async () =>
 
 test('綠界模擬付款（SimulatePaid=1）不改訂單、不扣庫存', async () => {
   const res = mockRes();
-  await checkout(req({ items: [{ id: 'NAIL_0001', size: 'S', quantity: 1 }], name: '王小美', phone: '0912345678', address: '台北' }), res);
+  await checkout(req({ items: [{ id: 'NAIL_0001', size: 'S', quantity: 1 }], name: '王小美', phone: '0912345678', store: STORE }), res);
   const no = formValue(res.body, 'MerchantTradeNo');
   const before = (await fakeFirebase.inventoryRef().doc('NAIL_0001').get()).data().stock.S;
   const res2 = mockRes();
@@ -159,7 +161,7 @@ test('排程：漏收通知的已付款訂單會補登，並自動開立電子�
   process.env.INVOICE_ENABLED = 'true';
   await fakeFirebase.inventoryRef().doc('NAIL_0001').update({ stock: { XS: 0, S: 2, M: 1, L: 1 } });
   const res = mockRes();
-  await checkout(req({ items: [{ id: 'NAIL_0001', size: 'L', quantity: 1 }], name: '王小美', phone: '0912345678', address: '台北', invoice: { type: 'mobile', carrierNum: '/ABC+123' } }), res);
+  await checkout(req({ items: [{ id: 'NAIL_0001', size: 'L', quantity: 1 }], name: '王小美', phone: '0912345678', store: STORE, invoice: { type: 'mobile', carrierNum: '/ABC+123' } }), res);
   const no = formValue(res.body, 'MerchantTradeNo');
   await fakeFirebase.ordersRef().doc(no).update({ createdAt: new Date(Date.now() - 3 * 3600 * 1000).toISOString() });
 
@@ -196,7 +198,7 @@ test('排程：漏收通知的已付款訂單會補登，並自動開立電子�
 
 test('排程：繳費期限已過且未付款的 ATM 訂單自動取消', async () => {
   const res = mockRes();
-  await checkout(req({ items: [{ id: 'NAIL_0001', size: 'S', quantity: 1 }], name: '王小美', phone: '0912345678', address: '台北' }), res);
+  await checkout(req({ items: [{ id: 'NAIL_0001', size: 'S', quantity: 1 }], name: '王小美', phone: '0912345678', store: STORE }), res);
   const no = formValue(res.body, 'MerchantTradeNo');
   await fakeFirebase.ordersRef().doc(no).update({ status: 'awaiting_payment', paymentInfo: { expireDate: '2026/01/01' } });
   const realFetch = global.fetch;
@@ -210,4 +212,11 @@ test('排程：繳費期限已過且未付款的 ATM 訂單自動取消', async 
 test('繳費期限（台灣時間）解析', () => {
   assert.strictEqual(maintenance.parseTaipei('2026/10/14').toISOString(), '2026-10-14T15:59:59.000Z');
   assert.strictEqual(maintenance.parseTaipei('2026/10/14 12:00:00').toISOString(), '2026-10-14T04:00:00.000Z');
+});
+
+test('只填地址（宅配）無法結帳，必須選擇超商門市', async () => {
+  const res = mockRes();
+  await checkout(req({ items: [{ id: 'NAIL_0001', size: 'S', quantity: 1 }], name: '王小美', phone: '0912345678', address: '台北市信義區' }), res);
+  assert.equal(res.statusCode, 400);
+  assert.match(res.body.error, /取貨門市/);
 });

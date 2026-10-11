@@ -104,7 +104,7 @@ function Footer() {
           讓每一次打扮都沒有負擔，隨時換上最新流行。
         </div>
         <div style="flex:1 1 200px"><strong>付款方式</strong>綠界 ECPay：信用卡、ATM 轉帳、超商代碼</div>
-        <div style="flex:1 1 200px"><strong>配送方式</strong>7-ELEVEN／全家 超商取貨、宅配<br />滿 ${money(SITE.freeShippingThreshold)} 免運，未滿運費 ${money(SITE.shippingFee)}</div>
+        <div style="flex:1 1 200px"><strong>配送方式</strong>7-ELEVEN／全家 超商取貨<br />滿 ${money(SITE.freeShippingThreshold)} 免運，未滿運費 ${money(SITE.shippingFee)}</div>
         <div style="flex:1 1 200px"><strong>聯絡我們</strong><a href=${`mailto:${SITE.contactEmail}`}>${SITE.contactEmail}</a></div>
       </div>
     </footer>`;
@@ -409,10 +409,9 @@ function CartDrawer({ cart, setCart, onClose, promo, setPromo, quote }) {
 
 // ---------- 結帳 ----------
 function Checkout({ cart, user, quote, promo }) {
-  const [form, setForm] = useState({ name: user?.displayName || '', phone: '', email: user?.email || '', address: '' });
+  const [form, setForm] = useState({ name: user?.displayName || '', phone: '', email: user?.email || '' });
   const [method, setMethod] = useState('UNIMARTC2C');
   const [store, setStore] = useState(null);
-  const [invoice, setInvoice] = useState({ type: 'cloud', carrierNum: '', loveCode: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
@@ -428,19 +427,19 @@ function Checkout({ cart, user, quote, promo }) {
 
   if (!cart.length) return html`<div class="container section"><div class="empty">購物車是空的。<br /><a href="#/">去挑選款式</a></div></div>`;
 
-  const isHome = method === 'HOME';
-  const storeOk = isHome ? form.address.trim().length > 5 : store && store.subType === method;
+  const storeOk = store && store.subType === method;
   const submit = async (e) => {
     e.preventDefault();
     setError('');
-    if (!storeOk) return setError(isHome ? '請填寫宅配地址' : '請先選擇取貨門市');
+    if (!storeOk) return setError('請先選擇取貨門市');
     setBusy(true);
     try {
       const res = await postJson('/api/checkout', {
         items: cart.map((l) => ({ id: l.id, size: l.size, quantity: l.qty })),
         promoCode: promo, name: form.name, phone: form.phone,
-        store: isHome ? null : store, address: isHome ? form.address : '',
-        invoice: { ...invoice, email: form.email },
+        store,
+        // 目前不在結帳頁選發票；之後開啟電子發票時，預設開立雲端發票
+        invoice: { type: 'cloud', email: form.email },
       }, true);
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.action) throw new Error(data.error || '結帳失敗，請稍後再試');
@@ -451,8 +450,7 @@ function Checkout({ cart, user, quote, promo }) {
     }
   };
 
-  const methods = [['UNIMARTC2C', '7-ELEVEN 取貨'], ['FAMIC2C', '全家 取貨'], ['HOME', '宅配到府']];
-  const invoiceTypes = [['cloud', '雲端發票', '存在綠界會員載具，中獎會通知'], ['mobile', '手機條碼', '存到你的手機條碼載具'], ['donate', '捐贈發票', '捐給社福團體']];
+  const methods = [['UNIMARTC2C', '7-ELEVEN 取貨'], ['FAMIC2C', '全家 取貨']];
 
   return html`
     <form class="container checkout" onSubmit=${submit}>
@@ -464,8 +462,8 @@ function Checkout({ cart, user, quote, promo }) {
           <h2>收件人</h2>
           <div class="fields">
             <label class="field">姓名（取貨核對用）<input required maxlength="20" autocomplete="name" value=${form.name} onInput=${set('name')} /></label>
-            <label class="field">手機號碼<input required type="tel" inputmode="numeric" pattern="09[0-9]{8}" placeholder="0912345678" autocomplete="tel" value=${form.phone} onInput=${set('phone')} /><small>09 開頭 10 碼，取貨與發票通知用</small></label>
-            <label class="field">Email（選填）<input type="email" autocomplete="email" value=${form.email} onInput=${set('email')} /><small>填寫可收到電子發票通知</small></label>
+            <label class="field">手機號碼<input required type="tel" inputmode="numeric" pattern="09[0-9]{8}" placeholder="0912345678" autocomplete="tel" value=${form.phone} onInput=${set('phone')} /><small>09 開頭 10 碼，取貨通知用</small></label>
+            <label class="field">Email（選填）<input type="email" autocomplete="email" value=${form.email} onInput=${set('email')} /><small>方便我們聯絡你</small></label>
           </div>
         </section>
 
@@ -474,23 +472,12 @@ function Checkout({ cart, user, quote, promo }) {
           <div class="options">
             ${methods.map(([k, l]) => html`<button type="button" class="option" aria-pressed=${method === k} onClick=${() => setMethod(k)}><strong>${l}</strong><span>${quote.totals?.shippingFee === 0 ? '本單免運' : `運費 ${money(SITE.shippingFee)}`}</span></button>`)}
           </div>
-          ${isHome
-            ? html`<div class="fields store-picked"><label class="field">宅配地址<textarea required value=${form.address} onInput=${set('address')}></textarea></label></div>`
-            : html`<div class="store-picked">
-                <button type="button" class="btn btn-ghost" onClick=${() => window.open(`/api/ecpay/map?type=${method}`, 'ecpayMap', 'width=1000,height=700')}>${store && store.subType === method ? '重新選擇門市' : '開啟地圖選擇門市'}</button>
-                ${store && store.subType === method && html`<div class="notice notice-mint" style="margin-top:10px">已選擇：${store.name}（${store.address}）</div>`}
-              </div>`}
+          <div class="store-picked">
+            <button type="button" class="btn btn-ghost" onClick=${() => window.open(`/api/ecpay/map?type=${method}`, 'ecpayMap', 'width=1000,height=700')}>${store && store.subType === method ? '重新選擇門市' : '開啟地圖選擇門市'}</button>
+            ${store && store.subType === method && html`<div class="notice notice-mint" style="margin-top:10px">已選擇：${store.name}（${store.address}）</div>`}
+          </div>
         </section>
 
-        <section class="panel">
-          <h2>電子發票</h2>
-          <div class="options">
-            ${invoiceTypes.map(([k, l, n]) => html`<button type="button" class="option" aria-pressed=${invoice.type === k} onClick=${() => setInvoice({ ...invoice, type: k })}><strong>${l}</strong><span>${n}</span></button>`)}
-          </div>
-          ${invoice.type === 'mobile' && html`<div class="fields store-picked"><label class="field">手機條碼<input required pattern="/[0-9A-Za-z+.\\-]{7}" placeholder="/ABC+123" value=${invoice.carrierNum} onInput=${(e) => setInvoice({ ...invoice, carrierNum: e.target.value })} /><small>斜線開頭共 8 碼</small></label></div>`}
-          ${invoice.type === 'donate' && html`<div class="fields store-picked"><label class="field">愛心碼<input required inputmode="numeric" pattern="[0-9]{3,7}" placeholder="例：168001" value=${invoice.loveCode} onInput=${(e) => setInvoice({ ...invoice, loveCode: e.target.value })} /></label></div>`}
-          <p class="muted" style="font-size:13px;margin:12px 0 0">需要公司統編發票，請在付款後來信 ${SITE.contactEmail}</p>
-        </section>
       </div>
 
       <aside class="checkout-side panel">
