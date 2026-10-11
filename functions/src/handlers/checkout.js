@@ -22,12 +22,11 @@ module.exports = async (req, res) => {
     if (!name) return fail(res, 400, '請填寫收件人姓名');
     if (!/^09\d{8}$/.test(phone)) return fail(res, 400, '手機號碼需為 09 開頭 10 碼');
 
-    // 超商門市（綠界電子地圖選店結果）或宅配地址
+    // 超商門市（綠界電子地圖選店結果）；目前只提供超商取貨，不開放宅配
     const store = body.store && CVS_SUBTYPES.includes(body.store.subType) && /^[A-Za-z0-9]{1,10}$/.test(String(body.store.id || ''))
       ? { subType: body.store.subType, id: String(body.store.id), name: ecpay.cleanText(body.store.name, 40), address: ecpay.cleanText(body.store.address, 100) }
       : null;
-    const address = ecpay.cleanText(body.address, 120);
-    if (!store && !address) return fail(res, 400, '請選擇取貨門市或填寫地址');
+    if (!store) return fail(res, 400, '請選擇取貨門市');
 
     const { invoice, error } = normalizeInvoiceRequest(body.invoice, phone);
     if (error) return fail(res, 400, error);
@@ -45,8 +44,8 @@ module.exports = async (req, res) => {
       totals,
       totalAmount: totals.total,
       customerUid: user ? user.uid : null,
-      customerInfo: { name, phone, address: store ? `[${store.subType}] ${store.name}（${store.address}）` : address },
-      shipping: store ? { method: 'CVS', ...store } : { method: 'HOME', address },
+      customerInfo: { name, phone, address: `[${store.subType}] ${store.name}（${store.address}）` },
+      shipping: { method: 'CVS', ...store },
       invoice,
       status: 'pending',
       createdAt: now,
