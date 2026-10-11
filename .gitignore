@@ -1,4 +1,8 @@
 node_modules/
 .env
 .env.*
-.vercel
+.secret.local
+functions/.secret.local
+functions/.env*
+.firebase/
+*-debug.log

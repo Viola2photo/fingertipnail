@@ -1,36 +1,39 @@
-const functions = require('firebase-functions');
-const vision = require('@google-cloud/vision');
+// Firebase Cloud Functions 進入點（地區：asia-east1 台灣）
+const { onRequest, onCall, HttpsError } = require('firebase-functions/v2/https');
+const { onSchedule } = require('firebase-functions/v2/scheduler');
+const { setGlobalOptions } = require('firebase-functions/v2');
+const { allSecrets } = require('./src/params');
 
-// 創建 Vision API 客戶端
-const client = new vision.ImageAnnotatorClient();
+setGlobalOptions({ region: 'asia-east1', maxInstances: 10 });
 
-exports.analyzeImage = functions.https.onCall(async (data, context) => {
-  // 檢查用戶是否已認證
-  if (!context.auth) {
-    throw new functions.https.HttpsError('unauthenticated', '用戶未認證');
-  }
+// 所有 /api/* 請求（結帳、綠界通知、後台操作）
+exports.api = onRequest({ secrets: allSecrets, memory: '256MiB', timeoutSeconds: 60, invoker: 'public' }, (req, res) => {
+  const { handle } = require('./src/router');
+  return handle(req, res);
+});
 
+// 每 10 分鐘：自動開立電子發票、補查付款、取消逾期未付款訂單
+exports.maintenance = onSchedule({ schedule: 'every 10 minutes', timeZone: 'Asia/Taipei', secrets: allSecrets }, async () => {
+  const { runMaintenance } = require('./src/maintenance');
+  const log = await runMaintenance();
+  if (log.length) console.log('maintenance', log);
+});
+
+// 建檔系統的「照片識別款式」（Google Vision），沿用原本功能
+exports.analyzeImage = onCall({ memory: '512MiB' }, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', '請先登入');
+  const imageBase64 = String(request.data?.imageBase64 || '');
+  if (!imageBase64.includes(',')) throw new HttpsError('invalid-argument', '缺少圖片');
+  const vision = require('@google-cloud/vision');
+  const client = new vision.ImageAnnotatorClient();
   try {
-    const { imageBase64 } = data;
-
-    // 將 base64 轉換為 Vision API 格式
-    const request = {
-      image: {
-        content: imageBase64.split(',')[1] // 移除 data:image/jpeg;base64,前綴
-      },
-      features: [{
-        type: 'LABEL_DETECTION',
-        maxResults: 10
-      }]
-    };
-
-    // 調用 Vision API
-    const [result] = await client.annotateImage(request);
-    const labels = result.labelAnnotations.map(label => label.description.toLowerCase());
-
-    return { labels };
-  } catch (error) {
-    console.error('Vision API 錯誤:', error);
-    throw new functions.https.HttpsError('internal', '圖像分析失敗');
+    const [result] = await client.annotateImage({
+      image: { content: imageBase64.split(',')[1] },
+      features: [{ type: 'LABEL_DETECTION', maxResults: 10 }],
+    });
+    return { labels: (result.labelAnnotations || []).map((l) => l.description.toLowerCase()) };
+  } catch (e) {
+    console.error('Vision API 錯誤', e);
+    throw new HttpsError('internal', '圖像分析失敗');
   }
 });

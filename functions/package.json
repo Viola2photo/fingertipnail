@@ -1,24 +1,20 @@
 {
-  "name": "functions",
-  "description": "Cloud Functions for Firebase",
+  "name": "fingertipnail-functions",
+  "description": "指尖造藝：結帳、綠界金流／物流／電子發票、後台 API",
+  "private": true,
+  "main": "index.js",
+  "engines": {
+    "node": "22"
+  },
   "scripts": {
-    "serve": "firebase emulators:start --only functions",
-    "shell": "firebase functions:shell",
-    "start": "npm run shell",
+    "test": "node --test test/*.test.js",
+    "serve": "firebase emulators:start --only functions,hosting",
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log"
   },
-  "engines": {
-    "node": "18"
-  },
-  "main": "index.js",
   "dependencies": {
-    "firebase-admin": "^11.8.0",
-    "firebase-functions": "^4.3.1",
-    "@google-cloud/vision": "^3.0.1"
-  },
-  "devDependencies": {
-    "firebase-functions-test": "^3.1.0"
-  },
-  "private": true
+    "@google-cloud/vision": "^6.1.1",
+    "firebase-admin": "^14.5.0",
+    "firebase-functions": "^7.4.0"
+  }
 }
