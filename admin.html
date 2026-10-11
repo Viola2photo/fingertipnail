@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>指尖造藝 管理後台</title>
+  <meta name="robots" content="noindex, nofollow">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-storage-compat.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Noto Sans TC', sans-serif; background: #F8F3F6; color: #2E1F33; }
+    .serif { font-family: 'Noto Serif TC', serif; }
+    .card { background: #fff; border: 1px solid #EEDDE6; border-radius: 20px; }
+    .btn { min-height: 40px; padding: 0 16px; border-radius: 9999px; font-weight: 700; font-size: 14px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+    .btn-primary { background: #A8325F; color: #fff; }
+    .btn-primary:hover { background: #8E2950; }
+    .btn-ghost { background: #fff; color: #A8325F; border: 1.5px solid #E7A6C2; }
+    .btn-ghost:hover { background: #FCE4EE; }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    .input { height: 40px; border: 1px solid #E5D3DE; border-radius: 10px; padding: 0 10px; background: #fff; }
+    .input:not(.w-auto):not(.max-w-xs) { width: 100%; }
+    .input.max-w-xs { width: 100%; max-width: 20rem; }
+    textarea.input { height: auto; padding: 8px 10px; }
+    .input:focus { outline: 2px solid #E7A6C2; outline-offset: 0; }
+    .chip { min-height: 36px; padding: 0 14px; border-radius: 9999px; font-size: 14px; font-weight: 500; border: 1px solid #E5D3DE; background: #fff; }
+    .chip-on { background: #2E1F33; color: #fff; border-color: #2E1F33; }
+    .muted { color: #6B5670; }
+  </style>
+</head>
+<body>
+  <div id="root"><p class="p-10 text-center muted">載入中…</p></div>
+
+  <script type="text/babel" data-presets="react">
+    const firebaseConfig = {
+      apiKey: "AIzaSyDQZGeeubB8bEUL59v9yt0QBAfIWJcvgnw",
+      authDomain: "nailproject-40022.firebaseapp.com",
+      projectId: "nailproject-40022",
+      storageBucket: "nailproject-40022.firebasestorage.app",
+      messagingSenderId: "1004628981925",
+      appId: "1:1004628981925:web:db01ede0c09f4071d5754c"
+    };
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+    const storage = firebase.storage();
+    const appId = 'nail-inventory-app';
+    const adminUserId = 'MvkJo5e1kEcBS0fGGMr4RKdQjYg1';
+    const shopRoot = db.collection('artifacts').doc(appId).collection('users').doc(adminUserId);
+    const inventoryCol = shopRoot.collection('inventory');
+    const ordersCol = shopRoot.collection('orders');
+    const movementsCol = shopRoot.collection('stockMovements');
+
+    const { useState, useEffect, useMemo, useRef, useCallback } = React;
+
+    // ---------- 共用常數與工具 ----------
+    const SIZES = ['XS', 'S', 'M', 'L'];
+    const NAIL_SHAPES = ['短梯', '短橢圓', '短圓', '中橢圓', '杏仁甲', '中梯', '新中方', '長橢圓', '細狗尖', '長梯', '長水滴', '超長梯'];
+    const PRICE_TIERS = [300, 390, 450, 490, 590];
+    // 上架新款時自動帶入的固定資料（與你目前的商品表一致）
+    const PRODUCT_DEFAULTS = { weightKg: 0.2, lengthCm: 9, widthCm: 9, heightCm: 2, specType: '尺寸', preorder: 'N' };
+    const STATUS = {
+      pending: ['待付款', 'bg-gray-100 text-gray-700'],
+      awaiting_payment: ['待繳費', 'bg-gray-100 text-gray-700'],
+      paid: ['待出貨', 'bg-orange-100 text-orange-800'],
+      shipping: ['已建物流單', 'bg-blue-100 text-blue-800'],
+      shipped: ['已出貨', 'bg-sky-100 text-sky-800'],
+      completed: ['已完成', 'bg-green-100 text-green-800'],
+      cancelled: ['已取消', 'bg-pink-100 text-pink-800'],
+      payment_failed: ['付款失敗', 'bg-pink-100 text-pink-800'],
+      amount_mismatch: ['金額不符', 'bg-red-100 text-red-800'],
+    };
+    const PAID = ['paid', 'shipping', 'shipped', 'completed'];
+    const MOVEMENT_TYPES = { purchase: '進貨', adjust: '盤點調整', return: '退貨入庫', sale: '售出', import: '匯入調整' };
+
+    const totalStock = (p) => SIZES.reduce((s, k) => s + Number(p.stock?.[k] || 0), 0);
+    const money = (n) => `NT$${Number(n || 0).toLocaleString('zh-TW')}`;
+    const fmtTime = (iso) => iso ? new Date(iso).toLocaleString('zh-TW', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
+    const firstImage = (p) => (p.media || []).find(m => m.type !== 'video')?.url;
+    const nextId = (inventory, offset = 0) => {
+      const max = inventory.reduce((m, p) => { const x = /^NAIL_(\d+)$/.exec(p.id || p.docId || ''); return x ? Math.max(m, Number(x[1])) : m; }, 0);
+      return `NAIL_${String(max + 1 + offset).padStart(4, '0')}`;
+    };
+    const orderAmount = (o) => Number(o.payment?.tradeAmt || o.totalAmount || 0);
+
+    function downloadCsv(filename, rows) {
+      if (!rows.length) return alert('這個期間沒有資料');
+      const headers = Object.keys(rows[0]);
+      const esc = (v) => { const s = v === null || v === undefined ? '' : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+      const csv = '﻿' + [headers.map(esc).join(','), ...rows.map(r => headers.map(h => esc(r[h])).join(','))].join('\r\n');
+      const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+      const a = Object.assign(document.createElement('a'), { href: url, download: filename });
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    }
+
+    async function apiPost(path, body) {
+      const token = await auth.currentUser.getIdToken();
+      const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `操作失敗（${res.status}）`);
+      return data;
+    }
+
+    // 照片壓縮後上傳到 Firebase Storage（與建檔系統相同的做法）
+    function compressImage(file, max = 1200) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = reject;
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onerror = reject;
+          img.onload = () => {
+            let { width, height } = img;
+            const scale = Math.min(1, max / Math.max(width, height));
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.round(width * scale); canvas.height = Math.round(height * scale);
+            canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+            canvas.toBlob((blob) => resolve(blob), 'image/webp', 0.85);
+          };
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+    async function uploadPhoto(file, sku) {
+      const blob = await compressImage(file);
+      const ref = storage.ref().child(`products/${sku}/${Date.now()}_${Math.random().toString(36).slice(2, 7)}.webp`);
+      await ref.put(blob, { contentType: 'image/webp' });
+      return { id: Math.random().toString(36).slice(2, 11), type: 'image', url: await ref.getDownloadURL() };
+    }
+
+    // 上架前檢查：錯誤會擋住上架，提醒只顯示
+    function validateDraft(d, inventory, drafts) {
+      const errors = [], warnings = [];
+      if (!d.name.trim()) errors.push('缺品名');
+      if (d.name !== d.name.trim()) warnings.push('品名前後有空白，已自動去除');
+      if (!/^NAIL_\d{4,}$/.test(d.id)) errors.push('貨號需為 NAIL_0000 格式');
+      if (!(Number(d.price) > 0)) errors.push('售價無效');
+      if (!d.shape) errors.push('未選甲型');
+      if (drafts.filter(x => x.id === d.id).length > 1) errors.push('批次內貨號重複');
+      if (!d.existing && inventory.some(p => (p.docId || p.id) === d.id)) errors.push('貨號已被其他款式使用');
+      const sameName = inventory.find(p => p.name?.trim() === d.name.trim() && (p.docId || p.id) !== d.id);
+      if (d.name.trim() && sameName) warnings.push(`與 ${sameName.id} 同名`);
+      if (!d.existing && !(d.photos?.length || d.media?.length)) warnings.push('沒有照片');
+      if (SIZES.every(s => !Number(d.stock[s]))) warnings.push('各尺寸數量都是 0');
+      return { errors, warnings };
+    }
+
+    // ---------- 小元件 ----------
+    function Toast({ toast, onClose }) {
+      useEffect(() => { if (toast) { const t = setTimeout(onClose, 3500); return () => clearTimeout(t); } }, [toast]);
+      if (!toast) return null;
+      return <div role="status" className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-xl text-white font-bold text-sm ${toast.type === 'error' ? 'bg-red-700' : 'bg-[#2E1F33]'}`}>{toast.message}</div>;
+    }
+
+    function Modal({ title, onClose, children, wide }) {
+      return (
+        <div className="fixed inset-0 z-40 bg-black/40 flex items-end md:items-center justify-center p-0 md:p-6" onClick={onClose}>
+          <div role="dialog" aria-modal="true" aria-label={title} className={`bg-white w-full ${wide ? 'md:max-w-4xl' : 'md:max-w-lg'} max-h-[92vh] overflow-y-auto rounded-t-3xl md:rounded-3xl p-6`} onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-bold">{title}</h2>
+              <button aria-label="關閉" onClick={onClose} className="w-10 h-10 rounded-full hover:bg-gray-100 text-xl">×</button>
+            </div>
+            {children}
+          </div>
+        </div>
+      );
+    }
+
+    function Stat({ label, value, sub, tone }) {
+      const tones = { warn: 'bg-orange-50 text-[#8A4413] border-orange-100', pink: 'bg-[#FCE4EE] text-[#7E1F45] border-pink-100' };
+      return (
+        <div className={`rounded-2xl p-5 border ${tones[tone] || 'bg-white border-[#EEDDE6]'}`}>
+          <div className="text-sm opacity-80">{label}</div>
+          <div className="serif text-2xl md:text-3xl font-bold mt-1">{value}</div>
+          {sub && <div className="text-xs mt-1 opacity-80">{sub}</div>}
+        </div>
+      );
+    }
+
+    function StatusBadge({ status }) {
+      const [label, cls] = STATUS[status] || [status, 'bg-gray-100'];
+      return <span className={`inline-block text-xs font-bold px-2.5 py-1 rounded-full ${cls}`}>{label}</span>;
+    }
+
+    function SizeCells({ stock }) {
+      return SIZES.map(s => {
+        const n = Number(stock?.[s] || 0);
+        const cls = n === 0 ? 'bg-[#FCE4EE] text-[#A8325F]' : n === 1 ? 'bg-[#FFF0CC] text-[#6E5310]' : 'bg-[#EEF6F2] text-[#234C3E]';
+        return <span key={s} className={`inline-flex w-9 h-7 items-center justify-center rounded-lg text-sm font-bold ${cls}`} title={`${s}：${n} 件`}>{n}</span>;
+      });
+    }
+
+    // ---------- 總覽 ----------
+    function Dashboard({ inventory, orders, go }) {
+      const listed = inventory.filter(p => p.status !== 'N');
+      const sizeTotals = SIZES.map(s => ({ s, n: inventory.reduce((a, p) => a + Number(p.stock?.[s] || 0), 0) }));
+      const stockAll = sizeTotals.reduce((a, x) => a + x.n, 0);
+      const maxSize = Math.max(1, ...sizeTotals.map(x => x.n));
+      const retailValue = inventory.reduce((a, p) => a + totalStock(p) * Number(p.price || 0), 0);
+      const low = listed.filter(p => totalStock(p) === 1);
+      const soldOut = listed.filter(p => totalStock(p) === 0);
+      const month = new Date().toISOString().slice(0, 7);
+      const monthPaid = orders.filter(o => PAID.includes(o.status) && (o.paidAt || '').startsWith(month));
+      const monthRevenue = monthPaid.reduce((a, o) => a + orderAmount(o), 0);
+      const toShip = orders.filter(o => o.status === 'paid');
+      const awaiting = orders.filter(o => ['pending', 'awaiting_payment'].includes(o.status));
+      const alerts = orders.filter(o => o.status === 'amount_mismatch' || (o.oversold || []).length);
+
+      return (
+        <div className="space-y-6">
+          <div className="flex flex-wrap justify-between items-end gap-3">
+            <div>
+              <h1 className="serif text-3xl font-bold">今天要處理的事</h1>
+              <p className="muted text-sm mt-1">{listed.length} 款上架中 ・ 庫存 {stockAll} 件</p>
+            </div>
+            <button className="btn btn-primary" onClick={() => go('new')}>＋ 上架新款</button>
+          </div>
+
+          {alerts.length > 0 && (
+            <div className="rounded-2xl p-4 bg-red-50 text-red-800 text-sm font-bold">
+              有 {alerts.length} 筆訂單需要人工確認（金額不符或付款時庫存不足），請到「訂單與出貨」查看。
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <button className="text-left" onClick={() => go('orders')}><Stat label="待出貨訂單" value={toShip.length} sub="綠界已付款" /></button>
+            <button className="text-left" onClick={() => go('orders')}><Stat label="待付款／待繳費" value={awaiting.length} sub="ATM、超商代碼尚未繳" /></button>
+            <button className="text-left" onClick={() => go('inventory', 'low')}><Stat tone="warn" label="只剩 1 件" value={`${low.length} 款`} sub="點此看補貨清單" /></button>
+            <button className="text-left" onClick={() => go('inventory', 'soldout')}><Stat tone="pink" label="全尺寸售完仍上架" value={`${soldOut.length} 款`} sub="建議下架或補貨" /></button>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="card p-6 space-y-4">
+              <div className="flex justify-between"><h2 className="font-bold text-lg">庫存尺寸分布</h2><span className="muted text-sm">共 {stockAll} 件</span></div>
+              {sizeTotals.map(x => (
+                <div key={x.s} className="grid grid-cols-[36px_1fr_70px] gap-3 items-center">
+                  <strong>{x.s}</strong>
+                  <div className="h-3.5 bg-[#F3E9EF] rounded-full overflow-hidden"><div className="h-full rounded-full bg-[#A8325F]" style={{ width: `${x.n / maxSize * 100}%` }} /></div>
+                  <span className="text-right text-sm">{x.n} 件</span>
+                </div>
+              ))}
+              <p className="text-sm muted">「商品與庫存」可篩選缺尺寸的款式，安排補貨。</p>
+            </div>
+            <div className="card p-6 space-y-3">
+              <h2 className="font-bold text-lg">本月營收</h2>
+              <div className="serif text-4xl font-bold text-[#A8325F]">{money(monthRevenue)}</div>
+              <div className="muted text-sm">{monthPaid.length} 筆已付款訂單 ・ 庫存零售價值 {money(retailValue)}</div>
+              <button className="btn btn-ghost" onClick={() => go('finance')}>前往財務與報表</button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="card p-6">
+              <h2 className="font-bold text-lg mb-3">最新訂單</h2>
+              {orders.slice(0, 6).map(o => (
+                <div key={o.merchantTradeNo} className="flex justify-between items-center py-2.5 border-t border-[#F3E9EF] gap-3">
+                  <span className="min-w-0"><strong className="block truncate">{o.items?.map(i => i.name).join('、')}</strong><span className="text-xs muted">{o.merchantTradeNo} ・ {fmtTime(o.createdAt)}</span></span>
+                  <span className="text-right shrink-0"><StatusBadge status={o.status} /><div className="text-sm font-bold mt-1">{money(o.totalAmount)}</div></span>
+                </div>
+              ))}
+              {orders.length === 0 && <p className="muted text-sm">還沒有訂單。綠界串接完成後，顧客付款就會出現在這裡。</p>}
+            </div>
+            <div className="card p-6">
+              <h2 className="font-bold text-lg mb-3">快賣完了</h2>
+              {low.slice(0, 6).map(p => (
+                <div key={p.docId} className="flex items-center gap-3 py-2 border-t border-[#F3E9EF]">
+                  {firstImage(p) ? <img src={firstImage(p)} alt="" className="w-10 h-12 object-cover rounded-xl" /> : <span className="w-10 h-12 rounded-xl bg-[#F6E3EC]" />}
+                  <span className="flex-1 min-w-0"><strong className="block truncate">{p.name}</strong><span className="text-xs muted">{p.id} ・ {p.shape}</span></span>
+                  <span className="flex gap-1"><SizeCells stock={p.stock} /></span>
+                </div>
+              ))}
+              {low.length === 0 && <p className="muted text-sm">目前沒有只剩 1 件的款式。</p>}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ---------- 商品與庫存 ----------
+    function StockModal({ product, onClose, notify }) {
+      const [type, setType] = useState('purchase');
+      const [qty, setQty] = useState({ XS: '', S: '', M: '', L: '' });
+      const [cost, setCost] = useState(product.cost ?? '');
+      const [note, setNote] = useState('');
+      const [saving, setSaving] = useState(false);
+      const isAdjust = type === 'adjust';
+
+      const save = async () => {
+        setSaving(true);
+        try {
+          await db.runTransaction(async (tx) => {
+            const ref = inventoryCol.doc(product.docId);
+            const snap = await tx.get(ref);
+            const stock = { ...(snap.data().stock || {}) };
+            const now = new Date().toISOString();
+            let changed = 0;
+            SIZES.forEach(s => {
+              if (qty[s] === '' || qty[s] === null) return;
+              const before = Number(stock[s] || 0);
+              const after = isAdjust ? Math.max(0, Number(qty[s])) : before + Math.max(0, Number(qty[s]));
+              if (after === before) return;
+              stock[s] = after; changed++;
+              tx.set(movementsCol.doc(), { type, productId: product.docId, name: product.name, size: s, quantity: after - before, before, after, unitCost: type === 'purchase' && cost !== '' ? Number(cost) : null, at: now, note, by: auth.currentUser.email || auth.currentUser.uid });
+            });
+            const patch = { stock };
+            if (cost !== '' && !isNaN(Number(cost))) patch.cost = Number(cost);
+            if (!changed && patch.cost === product.cost) throw new Error('沒有任何變更');
+            tx.update(ref, patch);
+          });
+          notify(`已更新 ${product.name} 的庫存`);
+          onClose();
+        } catch (e) { notify(e.message, 'error'); setSaving(false); }
+      };
+
+      return (
+        <Modal title={`庫存異動：${product.name}`} onClose={onClose}>
+          <div className="flex gap-2 mb-4 flex-wrap">
+            {['purchase', 'adjust', 'return'].map(t => <button key={t} className={`chip ${type === t ? 'chip-on' : ''}`} aria-pressed={type === t} onClick={() => setType(t)}>{MOVEMENT_TYPES[t]}</button>)}
+          </div>
+          <p className="text-sm muted mb-3">{isAdjust ? '輸入盤點後的實際數量（留白表示不變）' : '輸入這次增加的數量'}</p>
+          <div className="grid grid-cols-4 gap-2 mb-4">
+            {SIZES.map(s => (
+              <label key={s} className="text-sm font-bold">{s}<span className="font-normal muted text-xs block">目前 {product.stock?.[s] || 0}</span>
+                <input type="number" min="0" className="input mt-1" value={qty[s]} onChange={e => setQty({ ...qty, [s]: e.target.value })} />
+              </label>
+            ))}
+          </div>
+          <label className="text-sm font-bold block mb-3">每盒成本（NT$，填了才算得出毛利）
+            <input type="number" min="0" className="input mt-1" value={cost} onChange={e => setCost(e.target.value)} />
+          </label>
+          <label className="text-sm font-bold block mb-5">備註（供應商、批號、原因）
+            <input className="input mt-1" value={note} onChange={e => setNote(e.target.value)} />
+          </label>
+          <button className="btn btn-primary w-full" disabled={saving} onClick={save}>{saving ? '儲存中…' : '確認'}</button>
+        </Modal>
+      );
+    }
+
+    function EditModal({ product, onClose, notify }) {
+      const [form, setForm] = useState({ name: product.name || '', price: product.price || 390, shape: product.shape || '', description: product.description || '', hashtags: product.hashtags || '', status: product.status || 'Y' });
+      const save = async () => {
+        if (!form.name.trim()) return notify('品名不可空白', 'error');
+        await inventoryCol.doc(product.docId).update({ ...form, name: form.name.trim(), price: Number(form.price) });
+        notify('已儲存'); onClose();
+      };
+      return (
+        <Modal title={`編輯 ${product.id}`} onClose={onClose}>
+          <div className="space-y-3">
+            <label className="text-sm font-bold block">品名<input className="input mt-1" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="text-sm font-bold block">售價<select className="input mt-1" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })}>{[...new Set([...PRICE_TIERS, Number(form.price)])].map(p => <option key={p} value={p}>NT${p}</option>)}</select></label>
+              <label className="text-sm font-bold block">甲型<select className="input mt-1" value={form.shape} onChange={e => setForm({ ...form, shape: e.target.value })}><option value="">請選擇</option>{NAIL_SHAPES.map(s => <option key={s}>{s}</option>)}</select></label>
+            </div>
+            <label className="text-sm font-bold block">描述<textarea rows="3" className="input mt-1" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} /></label>
+            <label className="text-sm font-bold block">關鍵字（以 # 分隔）<input className="input mt-1" value={form.hashtags} onChange={e => setForm({ ...form, hashtags: e.target.value })} /></label>
+            <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" className="w-5 h-5" checked={form.status !== 'N'} onChange={e => setForm({ ...form, status: e.target.checked ? 'Y' : 'N' })} />在商店上架</label>
+            <p className="text-xs muted">照片與影片請在「建檔系統」的編輯視窗管理。</p>
+            <button className="btn btn-primary w-full" onClick={save}>儲存</button>
+          </div>
+        </Modal>
+      );
+    }
+
+    function Inventory({ inventory, notify, initialFilter }) {
+      const [q, setQ] = useState('');
+      const [filter, setFilter] = useState(initialFilter || 'all');
+      const [shape, setShape] = useState('');
+      const [stockFor, setStockFor] = useState(null);
+      const [editFor, setEditFor] = useState(null);
+      useEffect(() => { if (initialFilter) setFilter(initialFilter); }, [initialFilter]);
+
+      const rows = useMemo(() => inventory.filter(p => {
+        const t = totalStock(p);
+        if (q && !`${p.id} ${p.name}`.toLowerCase().includes(q.toLowerCase())) return false;
+        if (shape && p.shape !== shape) return false;
+        if (filter === 'low') return p.status !== 'N' && t === 1;
+        if (filter === 'soldout') return p.status !== 'N' && t === 0;
+        if (filter === 'missing') return SIZES.some(s => !Number(p.stock?.[s]));
+        if (filter === 'off') return p.status === 'N';
+        return true;
+      }), [inventory, q, filter, shape]);
+
+      const filters = [['all', '全部'], ['low', '剩 1 件'], ['soldout', '全售完'], ['missing', '有尺寸缺貨'], ['off', '已下架']];
+      return (
+        <div className="space-y-5">
+          <div className="flex flex-wrap justify-between items-end gap-3">
+            <div><h1 className="serif text-3xl font-bold">商品與庫存</h1><p className="muted text-sm mt-1">{inventory.length} 款 ・ 每次進貨、售出、盤點都會留下紀錄</p></div>
+            <a className="btn btn-ghost" href="index.html">開啟建檔／盤點系統</a>
+          </div>
+          <div className="flex flex-wrap gap-2 items-center">
+            <label className="sr-only" htmlFor="inv-q">搜尋貨號或品名</label>
+            <input id="inv-q" type="search" className="input max-w-xs rounded-full" placeholder="搜尋貨號或品名" value={q} onChange={e => setQ(e.target.value)} />
+            {filters.map(([k, l]) => <button key={k} className={`chip ${filter === k ? 'chip-on' : ''}`} aria-pressed={filter === k} onClick={() => setFilter(k)}>{l}</button>)}
+            <label className="sr-only" htmlFor="inv-shape">甲型</label>
+            <select id="inv-shape" className="input w-auto rounded-full" value={shape} onChange={e => setShape(e.target.value)}><option value="">全部甲型</option>{NAIL_SHAPES.map(s => <option key={s}>{s}</option>)}</select>
+          </div>
+          <div className="card overflow-x-auto">
+            <div className="min-w-[860px]">
+              <div className="grid grid-cols-[minmax(220px,2.4fr)_80px_80px_80px_200px_60px_150px] gap-2 px-4 py-3 text-xs muted font-bold">
+                <span>款式</span><span>甲型</span><span>售價</span><span>成本</span><span>XS ・ S ・ M ・ L</span><span>合計</span><span></span>
+              </div>
+              {rows.map(p => (
+                <div key={p.docId} className="grid grid-cols-[minmax(220px,2.4fr)_80px_80px_80px_200px_60px_150px] gap-2 px-4 py-2.5 border-t border-[#F3E9EF] items-center text-sm">
+                  <span className="flex items-center gap-3 min-w-0">
+                    {firstImage(p) ? <img src={firstImage(p)} alt="" className="w-9 h-11 object-cover rounded-lg" /> : <span className="w-9 h-11 rounded-lg bg-[#F6E3EC] shrink-0" />}
+                    <span className="min-w-0"><strong className="block truncate">{p.name}</strong><span className="text-xs muted">{p.id}{p.status === 'N' && ' ・ 已下架'}</span></span>
+                  </span>
+                  <span>{p.shape || '—'}</span>
+                  <span>${p.price}</span>
+                  <span className={p.cost ? '' : 'muted'}>{p.cost ? `$${p.cost}` : '未填'}</span>
+                  <span className="flex gap-1"><SizeCells stock={p.stock} /></span>
+                  <strong>{totalStock(p)}</strong>
+                  <span className="flex gap-1 justify-end">
+                    <button className="btn btn-ghost !min-h-[34px] !px-3" onClick={() => setStockFor(p)}>庫存</button>
+                    <button className="btn btn-ghost !min-h-[34px] !px-3" onClick={() => setEditFor(p)}>編輯</button>
+                  </span>
+                </div>
+              ))}
+              {rows.length === 0 && <p className="p-6 text-center muted">沒有符合條件的款式</p>}
+            </div>
+          </div>
+          {stockFor && <StockModal product={stockFor} onClose={() => setStockFor(null)} notify={notify} />}
+          {editFor && <EditModal product={editFor} onClose={() => setEditFor(null)} notify={notify} />}
+        </div>
+      );
+    }
+
+    // ---------- 上架新款 ----------
+    const emptyStock = () => ({ XS: 0, S: 0, M: 0, L: 0 });
+
+    function DraftTable({ drafts, setDrafts, inventory, showPhotos }) {
+      const update = (i, patch) => setDrafts(drafts.map((d, j) => j === i ? { ...d, ...patch } : d));
+      return (
+        <div className="card overflow-x-auto">
+          <div className="min-w-[980px]">
+            <div className="grid grid-cols-[110px_minmax(160px,1.6fr)_110px_100px_repeat(4,58px)_70px_minmax(160px,1.2fr)_44px] gap-2 px-4 py-3 text-xs muted font-bold">
+              <span>貨號</span><span>品名</span><span>甲型</span><span>售價</span>{SIZES.map(s => <span key={s}>{s}</span>)}<span>照片</span><span>檢查</span><span></span>
+            </div>
+            {drafts.map((d, i) => {
+              const v = validateDraft(d, inventory, drafts);
+              return (
+                <div key={d.key} className={`grid grid-cols-[110px_minmax(160px,1.6fr)_110px_100px_repeat(4,58px)_70px_minmax(160px,1.2fr)_44px] gap-2 px-4 py-2 border-t border-[#F3E9EF] items-center text-sm ${v.errors.length ? 'bg-red-50/60' : ''}`}>
+                  <span className="font-bold text-xs">{d.id}{d.existing && <span className="block font-normal muted">更新既有款</span>}</span>
+                  <input aria-label="品名" className="input" value={d.name} onChange={e => update(i, { name: e.target.value })} />
+                  <select aria-label="甲型" className="input" value={d.shape} onChange={e => update(i, { shape: e.target.value })}><option value="">選擇</option>{NAIL_SHAPES.map(s => <option key={s}>{s}</option>)}</select>
+                  <select aria-label="售價" className="input" value={d.price} onChange={e => update(i, { price: Number(e.target.value) })}>{[...new Set([...PRICE_TIERS, Number(d.price)])].map(p => <option key={p} value={p}>${p}</option>)}</select>
+                  {SIZES.map(s => <input key={s} aria-label={`${s} 數量`} type="number" min="0" className="input !px-2" value={d.stock[s]} onChange={e => update(i, { stock: { ...d.stock, [s]: e.target.value } })} />)}
+                  <span className="text-xs">{showPhotos ? `${d.photos?.length || 0} 張` : (d.media?.length || 0) + ' 張'}</span>
+                  <span className="text-xs leading-5">
+                    {v.errors.map(e => <span key={e} className="block text-red-700 font-bold">✕ {e}</span>)}
+                    {v.warnings.map(w => <span key={w} className="block text-[#8A4413]">! {w}</span>)}
+                    {!v.errors.length && !v.warnings.length && <span className="text-[#234C3E] font-bold">✓ 可上架</span>}
+                  </span>
+                  <button aria-label="移除這列" className="w-9 h-9 rounded-full hover:bg-gray-100" onClick={() => setDrafts(drafts.filter((_, j) => j !== i))}>×</button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    async function saveDrafts(drafts, inventory, setProgress) {
+      const now = new Date().toISOString();
+      let done = 0;
+      for (const d of drafts) {
+        setProgress(`上傳中 ${++done}/${drafts.length}：${d.name.trim()}`);
+        const uploaded = [];
+        for (const f of (d.photos || [])) uploaded.push(await uploadPhoto(f, d.id));
+        const ref = inventoryCol.doc(d.id);
+        const stock = Object.fromEntries(SIZES.map(s => [s, Math.max(0, Number(d.stock[s]) || 0)]));
+        const existing = inventory.find(p => (p.docId || p.id) === d.id);
+        const batch = db.batch();
+        if (existing) {
+          const patch = { name: d.name.trim(), price: Number(d.price), shape: d.shape, stock };
+          if (d.description) patch.description = d.description;
+          if (d.hashtags) patch.hashtags = d.hashtags;
+          if (uploaded.length) patch.media = [...(existing.media || []), ...uploaded];
+          batch.update(ref, patch);
+          SIZES.forEach(s => {
+            const before = Number(existing.stock?.[s] || 0);
+            if (before !== stock[s]) batch.set(movementsCol.doc(), { type: 'import', productId: d.id, name: d.name.trim(), size: s, quantity: stock[s] - before, before, after: stock[s], at: now, note: '上架新款／匯入更新', by: auth.currentUser.email || auth.currentUser.uid });
+          });
+        } else {
+          batch.set(ref, {
+            id: d.id, name: d.name.trim(), price: Number(d.price), shape: d.shape, stock,
+            description: d.description || '', hashtags: d.hashtags || '', media: [...(d.media || []), ...uploaded],
+            status: 'Y', ...PRODUCT_DEFAULTS, createdAt: now,
+          });
+          SIZES.forEach(s => { if (stock[s]) batch.set(movementsCol.doc(), { type: 'purchase', productId: d.id, name: d.name.trim(), size: s, quantity: stock[s], before: 0, after: stock[s], at: now, note: '新款上架', by: auth.currentUser.email || auth.currentUser.uid }); });
+        }
+        await batch.commit();
+      }
+    }
+
+    function SingleForm({ inventory, notify }) {
+      const last = inventory[0];
+      const [form, setForm] = useState(() => ({ name: '', shape: last?.shape || '', price: Number(last?.price) || 390, stock: emptyStock(), description: '', hashtags: '' }));
+      const [photos, setPhotos] = useState([]);
+      const [busy, setBusy] = useState('');
+      const id = nextId(inventory);
+      const draft = { ...form, id, key: id, photos };
+      const v = validateDraft(draft, inventory, [draft]);
+      const previews = useMemo(() => photos.map(f => URL.createObjectURL(f)), [photos]);
+
+      const submit = async () => {
+        try { await saveDrafts([draft], inventory, setBusy); notify(`已上架 ${form.name.trim()}（${id}）`); setForm({ ...form, name: '', stock: emptyStock(), description: '', hashtags: '' }); setPhotos([]); }
+        catch (e) { notify(`上架失敗：${e.message}`, 'error'); }
+        setBusy('');
+      };
+
+      return (
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 items-start">
+          <div className="space-y-5">
+            <section className="card p-6 space-y-3">
+              <h2 className="font-bold">① 照片</h2>
+              <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
+                {previews.map((src, i) => (
+                  <div key={src} className="relative aspect-[4/5] rounded-2xl overflow-hidden bg-[#F6E3EC]">
+                    <img src={src} alt={`照片 ${i + 1}`} className="w-full h-full object-cover" />
+                    {i === 0 && <span className="absolute bottom-1 left-1 text-[11px] bg-white/90 rounded px-1.5 font-bold">主圖</span>}
+                    <button aria-label="移除照片" className="absolute top-1 right-1 w-7 h-7 rounded-full bg-white/90" onClick={() => setPhotos(photos.filter((_, j) => j !== i))}>×</button>
+                  </div>
+                ))}
+                <label className="aspect-[4/5] rounded-2xl border-2 border-dashed border-[#C2457A] bg-[#FFF7FA] text-[#A8325F] text-sm font-bold flex items-center justify-center text-center cursor-pointer p-2">
+                  ＋ 選擇照片<br />或手機拍照
+                  <input type="file" accept="image/*" multiple className="sr-only" onChange={e => { setPhotos([...photos, ...e.target.files]); e.target.value = ''; }} />
+                </label>
+              </div>
+              <p className="text-xs muted">會自動壓縮並轉成 WebP；第一張為主圖。</p>
+            </section>
+            <section className="card p-6 space-y-4">
+              <h2 className="font-bold">② 基本資料</h2>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <label className="text-sm font-bold">品名（必填）<input className="input mt-1 border-[#C2457A]" placeholder="例：櫻花糖霜蝴蝶結" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></label>
+                <div className="text-sm font-bold">貨號<div className="input mt-1 bg-[#F3EEF2] flex items-center justify-between font-normal">{id}<span className="text-xs text-[#2F7A60] font-bold">自動編號</span></div></div>
+              </div>
+              <div>
+                <div className="text-sm font-bold mb-2">甲型 <span className="font-normal muted">（預設沿用上一款）</span></div>
+                <div className="flex flex-wrap gap-2">{NAIL_SHAPES.map(s => <button key={s} className={`chip ${form.shape === s ? 'chip-on' : ''}`} aria-pressed={form.shape === s} onClick={() => setForm({ ...form, shape: s })}>{s}</button>)}</div>
+              </div>
+              <div>
+                <div className="text-sm font-bold mb-2">售價</div>
+                <div className="flex flex-wrap gap-2">{PRICE_TIERS.map(p => <button key={p} className={`chip ${form.price === p ? '!bg-[#A8325F] !text-white !border-[#A8325F]' : ''}`} aria-pressed={form.price === p} onClick={() => setForm({ ...form, price: p })}>NT${p}</button>)}</div>
+              </div>
+              <div className="grid grid-cols-4 gap-2">
+                {SIZES.map(s => <label key={s} className="text-sm font-bold">{s} 數量<input type="number" min="0" className="input mt-1" value={form.stock[s]} onChange={e => setForm({ ...form, stock: { ...form.stock, [s]: e.target.value } })} /></label>)}
+              </div>
+            </section>
+            <section className="card p-6 space-y-3">
+              <h2 className="font-bold">③ 描述與關鍵字</h2>
+              <label className="text-sm font-bold block">商品描述（同時作為 SEO 描述與摘要）<textarea rows="3" className="input mt-1" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} /></label>
+              <label className="text-sm font-bold block">關鍵字（以 # 分隔，例：#蝴蝶結#甜妹風）<input className="input mt-1" value={form.hashtags} onChange={e => setForm({ ...form, hashtags: e.target.value })} /></label>
+            </section>
+          </div>
+          <aside className="space-y-4 lg:sticky lg:top-6">
+            <div className="card p-5 border-[#E7A6C2] space-y-2 text-sm">
+              <h2 className="font-bold mb-1">自動帶入</h2>
+              <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
+                <span className="muted">規格</span><span>尺寸 XS／S／M／L</span>
+                <span className="muted">分類</span><span>{form.shape || '—'}</span>
+                <span className="muted">SEO 標題、副標題</span><span>＝品名</span>
+                <span className="muted">重量</span><span>{PRODUCT_DEFAULTS.weightKg} 公斤</span>
+                <span className="muted">包裹</span><span>{PRODUCT_DEFAULTS.lengthCm}×{PRODUCT_DEFAULTS.widthCm}×{PRODUCT_DEFAULTS.heightCm} 公分</span>
+                <span className="muted">狀態</span><span>上架</span>
+              </div>
+            </div>
+            <div className="card p-5 text-sm space-y-1">
+              {v.errors.map(e => <div key={e} className="text-red-700 font-bold">✕ {e}</div>)}
+              {v.warnings.map(w => <div key={w} className="text-[#8A4413]">! {w}</div>)}
+              {!v.errors.length && <div className="text-[#234C3E] font-bold">✓ 可以上架</div>}
+            </div>
+            <button className="btn btn-primary w-full !min-h-[48px]" disabled={!!v.errors.length || !!busy} onClick={submit}>{busy || '上架'}</button>
+          </aside>
+        </div>
+      );
+    }
+
+    // 依檔名把照片分組：NAIL_0281_1.jpg、NAIL_0281-2.png、NAIL_0281.jpg → NAIL_0281
+    function groupPhotos(files) {
+      const groups = {};
+      const unmatched = [];
+      [...files].filter(f => f.type.startsWith('image/')).sort((a, b) => a.name.localeCompare(b.name, 'zh-TW', { numeric: true })).forEach(f => {
+        const m = /^(NAIL)[_-]?(\d{1,6})/i.exec(f.name);
+        if (m) { const sku = `NAIL_${m[2].padStart(4, '0')}`; (groups[sku] = groups[sku] || []).push(f); }
+        else unmatched.push(f);
+      });
+      return { groups, unmatched };
+    }
+
+    function BatchPhotos({ inventory, notify }) {
+      const [drafts, setDrafts] = useState([]);
+      const [defaults, setDefaults] = useState({ shape: inventory[0]?.shape || '', price: Number(inventory[0]?.price) || 390 });
+      const [unmatched, setUnmatched] = useState([]);
+      const [busy, setBusy] = useState('');
+
+      const onFiles = (files) => {
+        const { groups, unmatched } = groupPhotos(files);
+        const rows = Object.entries(groups).map(([sku, photos]) => {
+          const existing = inventory.find(p => (p.docId || p.id) === sku);
+          return existing
+            ? { key: sku, id: sku, existing: true, name: existing.name, shape: existing.shape || '', price: Number(existing.price) || 390, stock: { ...emptyStock(), ...existing.stock }, photos, media: existing.media }
+            : { key: sku, id: sku, name: '', shape: defaults.shape, price: defaults.price, stock: emptyStock(), photos };
+        });
+        setDrafts([...drafts, ...rows]);
+        setUnmatched(unmatched.map(f => f.name));
+      };
+      const ready = drafts.length && drafts.every(d => !validateDraft(d, inventory, drafts).errors.length);
+      const submit = async () => {
+        try { await saveDrafts(drafts, inventory, setBusy); notify(`已上架／更新 ${drafts.length} 款`); setDrafts([]); }
+        catch (e) { notify(`失敗：${e.message}`, 'error'); }
+        setBusy('');
+      };
+
+      return (
+        <div className="space-y-5">
+          <div className="card p-6 grid md:grid-cols-[1fr_auto] gap-6 items-center">
+            <div className="space-y-2 text-sm">
+              <p className="font-bold text-base">把整個照片資料夾拖進來，檔名開頭是貨號就會自動分組</p>
+              <p className="muted">例：NAIL_0281_1.jpg（主圖）、NAIL_0281_2.jpg… 已存在的貨號會把照片加到該款；新貨號會變成新款草稿。</p>
+              <div className="flex flex-wrap gap-3 items-end pt-2">
+                <label className="font-bold">新款預設甲型<select className="input mt-1" value={defaults.shape} onChange={e => setDefaults({ ...defaults, shape: e.target.value })}><option value="">請選擇</option>{NAIL_SHAPES.map(s => <option key={s}>{s}</option>)}</select></label>
+                <label className="font-bold">新款預設售價<select className="input mt-1" value={defaults.price} onChange={e => setDefaults({ ...defaults, price: Number(e.target.value) })}>{PRICE_TIERS.map(p => <option key={p} value={p}>NT${p}</option>)}</select></label>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              <label className="btn btn-ghost cursor-pointer">選擇照片<input type="file" accept="image/*" multiple className="sr-only" onChange={e => { onFiles(e.target.files); e.target.value = ''; }} /></label>
+              <label className="btn btn-ghost cursor-pointer">選擇整個資料夾<input type="file" webkitdirectory="" multiple className="sr-only" onChange={e => { onFiles(e.target.files); e.target.value = ''; }} /></label>
+            </div>
+          </div>
+          {unmatched.length > 0 && <div className="rounded-2xl p-4 bg-orange-50 text-[#8A4413] text-sm"><strong>{unmatched.length} 張照片檔名沒有貨號，未匯入：</strong>{unmatched.slice(0, 8).join('、')}{unmatched.length > 8 && '…'}<br />請改名為 NAIL_0000_1.jpg 的格式後再加入。</div>}
+          {drafts.length > 0 && <DraftTable drafts={drafts} setDrafts={setDrafts} inventory={inventory} showPhotos />}
+          {drafts.length > 0 && <div className="flex justify-end gap-3"><button className="btn btn-ghost" onClick={() => setDrafts([])}>清除</button><button className="btn btn-primary" disabled={!ready || !!busy} onClick={submit}>{busy || `全部上架（${drafts.length} 款）`}</button></div>}
+        </div>
+      );
+    }
+
+    // 讀取你目前使用的商品表（Excel / CSV，每個尺寸一列），依貨號合併成一款
+    function parseSheetRows(rows, inventory) {
+      const col = (row, prefix) => { const k = Object.keys(row).find(h => h.trim().startsWith(prefix)); return k ? String(row[k] ?? '').trim() : ''; };
+      const byKey = new Map();
+      let offset = 0;
+      rows.forEach(row => {
+        const name = col(row, '商品名稱') || col(row, '款式名稱') || col(row, '名稱');
+        if (!name) return;
+        let sku = col(row, '商品貨號') || col(row, '貨號');
+        const originalSku = sku;
+        if (/^\d+(\.0+)?$/.test(sku)) sku = ''; // Excel 把純數字貨號存成 9.0，改給新編號
+        const key = sku || `${originalSku}|${name}`;
+        if (!byKey.has(key)) {
+          const id = /^NAIL_\d+$/.test(sku) ? sku : null;
+          byKey.set(key, {
+            key, originalSku, id,
+            name: col(row, '商品名稱') || name,
+            price: Number(col(row, '商品售價') || col(row, '價格')) || 390,
+            shape: (col(row, '商品所有分類') || col(row, '甲型')).split(/[\/#]/)[0].trim(),
+            description: col(row, '商品描述') || col(row, '描述'),
+            hashtags: (col(row, '商品 SEO-Keywords') || col(row, '標籤')).split(/[,，]/).map(s => s.trim().replace(/^#/, '')).filter(Boolean).map(s => `#${s}`).join(''),
+            stock: emptyStock(),
+          });
+        }
+        const d = byKey.get(key);
+        const size = col(row, '商品規格名稱').toUpperCase();
+        const qty = Math.max(0, Math.round(Number(col(row, '商品庫存')) || 0));
+        if (SIZES.includes(size)) d.stock[size] = qty;
+        else SIZES.forEach(s => { const v = col(row, s); if (v !== '') d.stock[s] = Math.max(0, Number(v) || 0); });
+      });
+      return [...byKey.values()].map(d => {
+        // 貨號不是 NAIL_ 格式時，先用品名找既有款式，找不到才給新貨號
+        const byName = !d.id && inventory.find(p => p.name?.trim() === d.name.trim());
+        const existing = d.id ? inventory.find(p => (p.docId || p.id) === d.id) : byName;
+        const id = d.id || (byName ? (byName.docId || byName.id) : nextId(inventory, offset++));
+        return { ...d, id, existing: !!existing, media: existing?.media, renamedFrom: d.id || byName ? '' : d.originalSku };
+      });
+    }
+
+    function SheetImport({ inventory, notify }) {
+      const [drafts, setDrafts] = useState([]);
+      const [busy, setBusy] = useState('');
+      const [fileName, setFileName] = useState('');
+      const onFile = async (file) => {
+        if (!file) return;
+        setFileName(file.name);
+        const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '', raw: false });
+        setDrafts(parseSheetRows(rows, inventory));
+      };
+      const renamed = drafts.filter(d => d.renamedFrom);
+      const newCount = drafts.filter(d => !d.existing).length;
+      const ready = drafts.length && drafts.every(d => !validateDraft(d, inventory, drafts).errors.length);
+      const submit = async () => {
+        try { await saveDrafts(drafts, inventory, setBusy); notify(`匯入完成：新增 ${newCount} 款、更新 ${drafts.length - newCount} 款`); setDrafts([]); }
+        catch (e) { notify(`匯入失敗：${e.message}`, 'error'); }
+        setBusy('');
+      };
+      return (
+        <div className="space-y-5">
+          <div className="card p-6 flex flex-wrap justify-between gap-4 items-center">
+            <div className="text-sm space-y-1">
+              <p className="font-bold text-base">匯入商品表（.xlsx／.csv）</p>
+              <p className="muted">直接用你現在的格式（每個尺寸一列）。同貨號會合併成一款；已存在的貨號會更新資料並以表格數量為準，差異寫入進出貨紀錄。</p>
+              {fileName && <p>目前檔案：<strong>{fileName}</strong>，共 {drafts.length} 款（新增 {newCount}、更新 {drafts.length - newCount}）</p>}
+            </div>
+            <label className="btn btn-ghost cursor-pointer">選擇檔案<input type="file" accept=".xlsx,.xls,.csv" className="sr-only" onChange={e => { onFile(e.target.files[0]); e.target.value = ''; }} /></label>
+          </div>
+          {renamed.length > 0 && <div className="rounded-2xl p-4 bg-orange-50 text-[#8A4413] text-sm"><strong>{renamed.length} 款的貨號不是 NAIL_0000 格式，已自動給新貨號：</strong>{renamed.slice(0, 6).map(d => `${d.name}（${d.renamedFrom} → ${d.id}）`).join('、')}{renamed.length > 6 && '…'}</div>}
+          {drafts.length > 0 && <DraftTable drafts={drafts} setDrafts={setDrafts} inventory={inventory} />}
+          {drafts.length > 0 && <div className="flex justify-end gap-3"><button className="btn btn-ghost" onClick={() => setDrafts([])}>清除</button><button className="btn btn-primary" disabled={!ready || !!busy} onClick={submit}>{busy || '確認匯入'}</button></div>}
+        </div>
+      );
+    }
+
+    function NewStyle({ inventory, notify }) {
+      const [mode, setMode] = useState('single');
+      const modes = [['single', '單款上架', '1–3 款，表單填寫'], ['batch', '批次上架', '照片資料夾，依檔名分組'], ['sheet', '匯入商品表', '沿用你現在的 Excel 格式']];
+      return (
+        <div className="space-y-5">
+          <div><h1 className="serif text-3xl font-bold">上架新款</h1><p className="muted text-sm mt-1">先放照片，其他欄位系統幫你帶好；上架前會自動檢查貨號、品名與數量</p></div>
+          <div role="tablist" className="flex flex-wrap gap-3">
+            {modes.map(([k, l, n]) => (
+              <button key={k} role="tab" aria-selected={mode === k} onClick={() => setMode(k)} className={`text-left rounded-2xl px-4 py-2.5 bg-white ${mode === k ? 'border-2 border-[#A8325F]' : 'border border-[#E5D3DE]'}`}>
+                <strong className={`block ${mode === k ? 'text-[#A8325F]' : ''}`}>{l}</strong><span className="text-xs muted">{n}</span>
+              </button>
+            ))}
+          </div>
+          {mode === 'single' && <SingleForm inventory={inventory} notify={notify} />}
+          {mode === 'batch' && <BatchPhotos inventory={inventory} notify={notify} />}
+          {mode === 'sheet' && <SheetImport inventory={inventory} notify={notify} />}
+        </div>
+      );
+    }
+
+    // ---------- 訂單與出貨 ----------
+    function OrderDetail({ order, onClose, notify }) {
+      const [busy, setBusy] = useState('');
+      const [tracking, setTracking] = useState('');
+      const [restock, setRestock] = useState(true);
+      const [query, setQuery] = useState(null);
+      const run = async (label, fn) => {
+        setBusy(label);
+        try { await fn(); } catch (e) { notify(e.message, 'error'); }
+        setBusy('');
+      };
+      const act = (action, extra = {}) => run(action, async () => { await apiPost('/api/admin/order', { action, orderId: order.merchantTradeNo, ...extra }); notify('已更新訂單'); });
+      const createShipment = () => run('create', async () => { const r = await apiPost('/api/admin/logistics', { action: 'create', orderId: order.merchantTradeNo }); notify(`已建立物流單，寄貨編號 ${r.logistics.cvsPaymentNo}`); });
+      const printLabel = () => run('print', async () => {
+        const w = window.open('', '_blank');
+        const r = await apiPost('/api/admin/logistics', { action: 'print', orderId: order.merchantTradeNo });
+        w.document.open(); w.document.write(r.html); w.document.close();
+      });
+      const queryTrade = () => run('query', async () => { const r = await apiPost('/api/admin/order', { action: 'query', orderId: order.merchantTradeNo }); setQuery(r.data); });
+      const queryShipment = () => run('lquery', async () => { const r = await apiPost('/api/admin/logistics', { action: 'query', orderId: order.merchantTradeNo }); setQuery(r.data); });
+      const t = order.totals || {};
+
+      return (
+        <Modal title={`訂單 ${order.merchantTradeNo}`} onClose={onClose} wide>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+            <div className="space-y-4">
+              <div className="flex items-center gap-2"><StatusBadge status={order.status} /><span className="muted">{fmtTime(order.createdAt)}</span></div>
+              <div className="space-y-2">
+                {order.items?.map((i, k) => (
+                  <div key={k} className="flex gap-3 items-center">
+                    {i.image ? <img src={i.image} alt="" className="w-10 h-12 rounded-lg object-cover" /> : <span className="w-10 h-12 rounded-lg bg-[#F6E3EC]" />}
+                    <span className="flex-1"><strong>{i.name}</strong><span className="block text-xs muted">{i.id} ・ {i.size} × {i.quantity}</span></span>
+                    <span>{money(i.price * i.quantity)}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="bg-[#F8F3F6] rounded-xl p-3 space-y-1">
+                <div className="flex justify-between"><span>小計</span><span>{money(t.subtotal)}</span></div>
+                {t.eventDiscount > 0 && <div className="flex justify-between"><span>任 4 件 1000</span><span>−{money(t.eventDiscount)}</span></div>}
+                {t.promoDiscount > 0 && <div className="flex justify-between"><span>{t.promo?.name}</span><span>−{money(t.promoDiscount)}</span></div>}
+                <div className="flex justify-between"><span>運費</span><span>{money(t.shippingFee)}</span></div>
+                <div className="flex justify-between font-bold text-base pt-1"><span>合計</span><span>{money(order.totalAmount)}</span></div>
+                {order.payment && <div className="flex justify-between muted text-xs pt-1"><span>{order.payment.paymentType}{order.payment.simulated && '（模擬付款）'}</span><span>綠界手續費 {money(order.payment.fee)}</span></div>}
+              </div>
+              <div className="space-y-1">
+                <div><span className="muted">收件人</span> {order.customerInfo?.name} ・ {order.customerInfo?.phone}</div>
+                <div><span className="muted">取貨</span> {order.customerInfo?.address}</div>
+                {order.paymentInfo?.vAccount && <div><span className="muted">ATM</span> {order.paymentInfo.bankCode}-{order.paymentInfo.vAccount}（期限 {order.paymentInfo.expireDate}）</div>}
+                {order.paymentInfo?.paymentNo && <div><span className="muted">超商代碼</span> {order.paymentInfo.paymentNo}（期限 {order.paymentInfo.expireDate}）</div>}
+                {order.logistics?.id && <div><span className="muted">物流單</span> {order.logistics.id} ・ 寄貨編號 {order.logistics.cvsPaymentNo}{order.logistics.lastStatus && ` ・ ${order.logistics.lastStatus.message}`}</div>}
+                {order.manualTrackingNo && <div><span className="muted">追蹤編號</span> {order.manualTrackingNo}</div>}
+                {(order.oversold || []).length > 0 && <div className="text-red-700 font-bold">付款時庫存不足：{order.oversold.join('、')}</div>}
+              </div>
+            </div>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <h3 className="font-bold">出貨</h3>
+                {order.status === 'paid' && order.shipping?.method === 'CVS' && <button className="btn btn-primary w-full" disabled={!!busy} onClick={createShipment}>{busy === 'create' ? '建立中…' : '建立綠界超商物流單'}</button>}
+                {order.logistics?.id && <div className="flex gap-2"><button className="btn btn-ghost flex-1" disabled={!!busy} onClick={printLabel}>列印託運單</button><button className="btn btn-ghost flex-1" disabled={!!busy} onClick={queryShipment}>查詢物流</button></div>}
+                {['paid', 'shipping'].includes(order.status) && (
+                  <div className="flex gap-2"><label className="sr-only" htmlFor="trk">追蹤編號</label><input id="trk" className="input" placeholder="宅配追蹤編號（選填）" value={tracking} onChange={e => setTracking(e.target.value)} /><button className="btn btn-ghost shrink-0" disabled={!!busy} onClick={() => act('ship', { trackingNo: tracking })}>標記已出貨</button></div>
+                )}
+                {['shipping', 'shipped'].includes(order.status) && <button className="btn btn-ghost w-full" disabled={!!busy} onClick={() => act('complete')}>顧客已取貨，標記完成</button>}
+              </div>
+              <div className="space-y-2">
+                <h3 className="font-bold">綠界</h3>
+                <button className="btn btn-ghost w-full" disabled={!!busy} onClick={queryTrade}>查詢綠界交易狀態</button>
+                {query && <pre className="text-xs bg-[#F8F3F6] rounded-xl p-3 overflow-x-auto max-h-40">{Object.entries(query).filter(([k]) => k !== 'CheckMacValue').map(([k, v]) => `${k}: ${v}`).join('\n')}</pre>}
+              </div>
+              {order.status !== 'cancelled' && order.status !== 'completed' && (
+                <div className="space-y-2 border-t border-[#F3E9EF] pt-4">
+                  <h3 className="font-bold">取消訂單</h3>
+                  {PAID.includes(order.status) && <label className="flex items-center gap-2"><input type="checkbox" className="w-5 h-5" checked={restock} onChange={e => setRestock(e.target.checked)} />商品退回庫存</label>}
+                  {PAID.includes(order.status) && <p className="text-xs muted">已付款訂單取消後需另行退款：信用卡在綠界後台退刷，ATM／超商付款需自行退款給顧客。</p>}
+                  <button className="btn btn-ghost w-full !text-red-700 !border-red-200" disabled={!!busy} onClick={() => confirm('確定取消這筆訂單？') && act('cancel', { restock })}>取消訂單</button>
+                </div>
+              )}
+              <div>
+                <h3 className="font-bold mb-2">紀錄</h3>
+                <ol className="space-y-1.5 text-xs">{[...(order.history || [])].reverse().map((h, k) => <li key={k}><span className="muted">{fmtTime(h.at)}</span> {h.note}</li>)}</ol>
+              </div>
+            </div>
+          </div>
+        </Modal>
+      );
+    }
+
+    function printPickList(orders) {
+      const w = window.open('', '_blank');
+      const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      const rows = orders.map(o => `<tr><td>${esc(o.merchantTradeNo)}</td><td>${esc(o.customerInfo?.name)}</td><td>${o.items.map(i => `${esc(i.id)} ${esc(i.name)} <b>${esc(i.size)}</b> ×${i.quantity}`).join('<br>')}</td><td>${esc(o.customerInfo?.address)}</td></tr>`).join('');
+      w.document.write(`<!DOCTYPE html><meta charset="utf-8"><title>揀貨單</title><style>body{font-family:sans-serif;padding:24px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #999;padding:8px;font-size:13px;text-align:left;vertical-align:top}</style><h2>揀貨單（${orders.length} 筆）</h2><table><tr><th>訂單</th><th>收件人</th><th>商品</th><th>取貨</th></tr>${rows}</table><script>print()<\/script>`);
+      w.document.close();
+    }
+
+    function Orders({ orders, notify }) {
+      const [tab, setTab] = useState('paid');
+      const [q, setQ] = useState('');
+      const [openId, setOpenId] = useState(null);
+      const [selected, setSelected] = useState([]);
+      const [bulk, setBulk] = useState('');
+      const tabs = [['all', '全部'], ['awaiting', '待付款'], ['paid', '待出貨'], ['shipping', '已建物流單'], ['shipped', '已出貨'], ['completed', '已完成'], ['issue', '需處理'], ['cancelled', '已取消']];
+      const match = (o, k) => k === 'all' || (k === 'awaiting' ? ['pending', 'awaiting_payment'].includes(o.status) : k === 'issue' ? (o.status === 'amount_mismatch' || (o.oversold || []).length > 0) : o.status === k);
+      const rows = orders.filter(o => match(o, tab) && (!q || `${o.merchantTradeNo} ${o.customerInfo?.name} ${o.customerInfo?.phone} ${o.items?.map(i => i.name).join(' ')}`.includes(q)));
+      const open = orders.find(o => o.merchantTradeNo === openId);
+      const shippable = rows.filter(o => o.status === 'paid' && o.shipping?.method === 'CVS');
+
+      const bulkCreate = async () => {
+        const list = orders.filter(o => selected.includes(o.merchantTradeNo) && o.status === 'paid' && o.shipping?.method === 'CVS');
+        let ok = 0;
+        for (const o of list) {
+          setBulk(`建立物流單 ${ok + 1}/${list.length}`);
+          try { await apiPost('/api/admin/logistics', { action: 'create', orderId: o.merchantTradeNo }); ok++; }
+          catch (e) { notify(`${o.merchantTradeNo}：${e.message}`, 'error'); }
+        }
+        setBulk(''); setSelected([]);
+        notify(`已建立 ${ok} 張物流單`);
+      };
+
+      return (
+        <div className="space-y-5">
+          <div className="flex flex-wrap justify-between items-end gap-3">
+            <div><h1 className="serif text-3xl font-bold">訂單與出貨</h1><p className="muted text-sm mt-1">付款與物流狀態由綠界自動回傳更新</p></div>
+            <div className="flex flex-wrap gap-2">
+              <button className="btn btn-ghost" disabled={!rows.length} onClick={() => printPickList(selected.length ? orders.filter(o => selected.includes(o.merchantTradeNo)) : rows)}>列印揀貨單</button>
+              <button className="btn btn-primary" disabled={!selected.length || !!bulk} onClick={bulkCreate}>{bulk || `批次建立物流單（${selected.length}）`}</button>
+            </div>
+          </div>
+          <div role="tablist" className="flex flex-wrap gap-2 items-center">
+            {tabs.map(([k, l]) => <button key={k} role="tab" aria-selected={tab === k} className={`chip ${tab === k ? 'chip-on' : ''}`} onClick={() => { setTab(k); setSelected([]); }}>{l} {orders.filter(o => match(o, k)).length}</button>)}
+            <label className="sr-only" htmlFor="ord-q">搜尋訂單</label>
+            <input id="ord-q" type="search" className="input max-w-xs rounded-full" placeholder="訂單號、姓名、電話、商品" value={q} onChange={e => setQ(e.target.value)} />
+          </div>
+          <div className="card overflow-x-auto">
+            <div className="min-w-[900px] text-sm">
+              <div className="grid grid-cols-[40px_150px_90px_minmax(220px,2fr)_90px_130px_minmax(150px,1.2fr)_100px] gap-2 px-4 py-3 text-xs muted font-bold items-center">
+                <input type="checkbox" aria-label="全選可建立物流單的訂單" className="w-5 h-5" checked={shippable.length > 0 && shippable.every(o => selected.includes(o.merchantTradeNo))} onChange={e => setSelected(e.target.checked ? shippable.map(o => o.merchantTradeNo) : [])} />
+                <span>訂單編號</span><span>日期</span><span>商品</span><span>金額</span><span>付款</span><span>取貨</span><span>狀態</span>
+              </div>
+              {rows.map(o => (
+                <div key={o.merchantTradeNo} className="grid grid-cols-[40px_150px_90px_minmax(220px,2fr)_90px_130px_minmax(150px,1.2fr)_100px] gap-2 px-4 py-3 border-t border-[#F3E9EF] items-center hover:bg-[#FFF7FA]">
+                  <input type="checkbox" aria-label={`選取 ${o.merchantTradeNo}`} className="w-5 h-5" disabled={!(o.status === 'paid' && o.shipping?.method === 'CVS')} checked={selected.includes(o.merchantTradeNo)} onChange={e => setSelected(e.target.checked ? [...selected, o.merchantTradeNo] : selected.filter(x => x !== o.merchantTradeNo))} />
+                  <button className="text-left font-bold text-[#A8325F] underline-offset-2 hover:underline" onClick={() => setOpenId(o.merchantTradeNo)}>{o.merchantTradeNo}</button>
+                  <span className="muted">{fmtTime(o.createdAt)}</span>
+                  <span className="leading-6">{o.items?.map(i => `${i.name} ${i.size}×${i.quantity}`).join('、')}<span className="block text-xs muted">{o.customerInfo?.name}</span></span>
+                  <strong>{money(o.totalAmount)}</strong>
+                  <span className="text-xs">{o.payment?.paymentType || (o.paymentInfo ? `待繳：${o.paymentInfo.paymentType}` : '—')}</span>
+                  <span className="text-xs leading-5">{o.customerInfo?.address}</span>
+                  <span><StatusBadge status={o.status} /></span>
+                </div>
+              ))}
+              {rows.length === 0 && <p className="p-8 text-center muted">這個狀態目前沒有訂單</p>}
+            </div>
+          </div>
+          {open && <OrderDetail order={open} onClose={() => setOpenId(null)} notify={notify} />}
+        </div>
+      );
+    }
+
+    // ---------- 財務與報表 ----------
+    // 與你目前的商品表相同的欄位，方便盤點或日後搬到其他平台
+    const EXPORT_HEADERS = ['商品名稱(必填)', '商品規格類型', '商品規格名稱', '商品貨號', '商品成本(NT.)', '商品售價(NT.)(必填)', '商品庫存(必填)', '商品所有分類', '商品狀態(Y:上架/N:下架)', '商品 SEO-Title', '商品 SEO-Description', '商品 SEO-Keywords', '商品描述', '商品副標題', '商品圖片', '商品重量(公斤)', '商品長度(公分)', '商品寬度(公分)', '商品高度(公分)'];
+
+    function Finance({ orders, inventory }) {
+      const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+      const [loading, setLoading] = useState('');
+      const inMonth = (iso) => (iso || '').startsWith(month);
+      const paid = orders.filter(o => o.payment && inMonth(o.paidAt) && (PAID.includes(o.status) || o.status === 'cancelled'));
+      const active = paid.filter(o => o.status !== 'cancelled');
+      const gross = active.reduce((a, o) => a + orderAmount(o), 0);
+      const fee = active.reduce((a, o) => a + Number(o.payment?.fee || 0), 0);
+      const costOf = (line) => { const p = inventory.find(x => (x.docId || x.id) === line.id); return p?.cost ? Number(p.cost) * line.quantity : null; };
+      const lines = active.flatMap(o => o.items || []);
+      const knownCost = lines.map(costOf).filter(v => v !== null);
+      const cogs = knownCost.reduce((a, b) => a + b, 0);
+      const costCoverage = lines.length ? Math.round(knownCost.length / lines.length * 100) : 0;
+      const byType = active.reduce((m, o) => { const k = (o.payment?.paymentType || '其他').split('_')[0]; m[k] = (m[k] || 0) + orderAmount(o); return m; }, {});
+      const refunds = paid.filter(o => o.status === 'cancelled');
+
+      const salesBy = (keyFn) => {
+        const m = {};
+        lines.forEach(l => { const k = keyFn(l); m[k] = m[k] || { qty: 0, revenue: 0 }; m[k].qty += l.quantity; m[k].revenue += l.price * l.quantity; });
+        return m;
+      };
+
+      const reports = [
+        ['月營收報表', '每日營收、訂單數、手續費與淨額', () => {
+          const days = {};
+          active.forEach(o => { const d = o.paidAt.slice(0, 10); days[d] = days[d] || { 日期: d, 訂單數: 0, 營收: 0, 綠界手續費: 0, 淨額: 0 }; days[d].訂單數++; days[d].營收 += orderAmount(o); days[d].綠界手續費 += Number(o.payment?.fee || 0); days[d].淨額 = days[d].營收 - days[d].綠界手續費; });
+          downloadCsv(`月營收_${month}.csv`, Object.values(days).sort((a, b) => a.日期.localeCompare(b.日期)));
+        }],
+        ['綠界對帳表', '每筆交易的綠界編號、付款方式、手續費，對應訂單', () => downloadCsv(`綠界對帳_${month}.csv`, paid.map(o => ({ 付款時間: o.payment?.paymentDate, 訂單編號: o.merchantTradeNo, 綠界交易編號: o.payment?.tradeNo, 付款方式: o.payment?.paymentType, 金額: orderAmount(o), 手續費: o.payment?.fee || 0, 淨額: orderAmount(o) - Number(o.payment?.fee || 0), 狀態: STATUS[o.status]?.[0], 模擬付款: o.payment?.simulated ? '是' : '' })))],
+        ['進出貨明細', '這個月每一筆進貨、售出、退貨、盤點調整', async () => {
+          setLoading('進出貨明細');
+          try {
+            const snap = await movementsCol.where('at', '>=', `${month}-01`).where('at', '<', `${month}-99`).get();
+            const rows = snap.docs.map(d => d.data()).sort((a, b) => a.at.localeCompare(b.at)).map(m => ({ 時間: m.at.replace('T', ' ').slice(0, 19), 類型: MOVEMENT_TYPES[m.type] || m.type, 貨號: m.productId, 品名: m.name, 尺寸: m.size, 數量: m.quantity, 異動前: m.before, 異動後: m.after, 單位成本: m.unitCost ?? '', 訂單: m.orderId || '', 備註: m.note || '', 操作者: m.by || '系統' }));
+            downloadCsv(`進出貨明細_${month}.csv`, rows);
+          } finally { setLoading(''); }
+        }],
+        ['庫存盤點表', '目前所有款式 × 4 尺寸，格式同你現在的商品表', () => downloadCsv(`庫存盤點_${new Date().toISOString().slice(0, 10)}.csv`, inventory.flatMap(p => SIZES.map(s => Object.fromEntries(EXPORT_HEADERS.map((h, i) => [h, [p.name, '尺寸', s, p.id, p.cost ?? '', p.price, p.stock?.[s] || 0, p.shape, p.status === 'N' ? 'N' : 'Y', p.name, p.description || '', (p.hashtags || '').split('#').map(x => x.trim()).filter(Boolean).join(','), p.description || '', p.name, (p.media || []).filter(m => m.type !== 'video').map(m => m.url).join(','), p.weightKg ?? PRODUCT_DEFAULTS.weightKg, p.lengthCm ?? PRODUCT_DEFAULTS.lengthCm, p.widthCm ?? PRODUCT_DEFAULTS.widthCm, p.heightCm ?? PRODUCT_DEFAULTS.heightCm][i]])))))],
+        ['款式銷售排行', '哪些款、甲型、價位賣得最好', () => {
+          const m = salesBy(l => l.id);
+          downloadCsv(`款式銷售排行_${month}.csv`, Object.entries(m).sort((a, b) => b[1].qty - a[1].qty).map(([id, v]) => { const p = inventory.find(x => (x.docId || x.id) === id) || {}; return { 貨號: id, 品名: p.name, 甲型: p.shape, 售價: p.price, 售出件數: v.qty, 營收: v.revenue, 目前庫存: totalStock(p) }; }));
+        }],
+        ['尺寸需求分析', '各尺寸售出件數、目前庫存與缺貨款數', () => {
+          const m = salesBy(l => l.size);
+          downloadCsv(`尺寸需求_${month}.csv`, SIZES.map(s => ({ 尺寸: s, 本月售出: m[s]?.qty || 0, 目前庫存: inventory.reduce((a, p) => a + Number(p.stock?.[s] || 0), 0), 此尺寸缺貨款數: inventory.filter(p => p.status !== 'N' && !Number(p.stock?.[s])).length })));
+        }],
+      ];
+
+      return (
+        <div className="space-y-6">
+          <div className="flex flex-wrap justify-between items-end gap-3">
+            <div><h1 className="serif text-3xl font-bold">財務與報表</h1><p className="muted text-sm mt-1">以綠界付款通知的金額與手續費為準</p></div>
+            <label className="text-sm font-bold flex items-center gap-2">月份<input type="month" className="input w-auto" value={month} onChange={e => setMonth(e.target.value)} /></label>
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <Stat label="營收（含運費）" value={money(gross)} sub={`${active.length} 筆訂單`} />
+            <Stat label="綠界手續費" value={money(fee)} sub="付款通知回傳的手續費＋處理費" />
+            <Stat label="淨額" value={money(gross - fee)} sub={refunds.length ? `另有 ${refunds.length} 筆付款後取消` : ' '} />
+            {costCoverage === 100 || knownCost.length
+              ? <Stat label="毛利（估）" value={money(gross - fee - cogs)} sub={`成本資料涵蓋 ${costCoverage}% 的售出件`} tone={costCoverage < 100 ? 'warn' : undefined} />
+              : <Stat tone="warn" label="毛利" value="需先填成本" sub="在「商品與庫存」進貨時填每盒成本" />}
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.3fr] gap-6 items-start">
+            <div className="card p-6">
+              <h2 className="font-bold text-lg mb-3">付款方式</h2>
+              {Object.entries(byType).map(([k, v]) => <div key={k} className="flex justify-between py-2 border-t border-[#F3E9EF] text-sm"><span>{{ Credit: '信用卡', ATM: 'ATM 轉帳', CVS: '超商代碼', BARCODE: '超商條碼', WebATM: 'WebATM', TWQR: 'TWQR' }[k] || k}</span><strong>{money(v)}</strong></div>)}
+              {!Object.keys(byType).length && <p className="muted text-sm">這個月份還沒有已付款訂單。</p>}
+            </div>
+            <div className="card p-6">
+              <h2 className="font-bold text-lg mb-3">報表下載（CSV，可用 Excel 開啟）</h2>
+              <div className="grid sm:grid-cols-2 gap-3">
+                {reports.map(([name, desc, fn]) => (
+                  <div key={name} className="rounded-2xl bg-[#F8F3F6] p-4 flex flex-col gap-2">
+                    <strong>{name}</strong><span className="text-sm muted flex-1">{desc}</span>
+                    <button className="btn btn-ghost self-start" disabled={!!loading} onClick={fn}>{loading === name ? '產生中…' : '下載'}</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ---------- 主程式 ----------
+    function App() {
+      const [user, setUser] = useState(undefined);
+      const [inventory, setInventory] = useState([]);
+      const [orders, setOrders] = useState([]);
+      const [page, setPage] = useState('dashboard');
+      const [invFilter, setInvFilter] = useState(null);
+      const [toast, setToast] = useState(null);
+      const notify = useCallback((message, type) => setToast({ message, type }), []);
+      const isAdmin = user && user.uid === adminUserId;
+
+      useEffect(() => auth.onAuthStateChanged(setUser), []);
+      useEffect(() => {
+        if (!isAdmin) return;
+        const err = (e) => notify(`讀取資料失敗：${e.message}`, 'error');
+        const u1 = inventoryCol.onSnapshot(s => {
+          const list = s.docs.map(d => ({ ...d.data(), docId: d.id, id: d.data().id || d.id }));
+          list.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+          setInventory(list);
+        }, err);
+        const u2 = ordersCol.orderBy('createdAt', 'desc').limit(1000).onSnapshot(s => setOrders(s.docs.map(d => d.data())), err);
+        return () => { u1(); u2(); };
+      }, [isAdmin]);
+
+      const go = (p, filter) => { setPage(p); setInvFilter(filter || null); window.scrollTo(0, 0); };
+      const toShip = orders.filter(o => o.status === 'paid').length;
+      const nav = [['dashboard', '總覽'], ['inventory', '商品與庫存'], ['new', '上架新款'], ['orders', '訂單與出貨'], ['finance', '財務與報表']];
+
+      if (user === undefined) return <div className="p-10 text-center muted">載入中…</div>;
+      if (!isAdmin) return (
+        <div className="min-h-screen flex items-center justify-center p-6">
+          <div className="card p-10 max-w-sm w-full text-center space-y-4">
+            <div className="serif text-3xl font-bold tracking-widest">指尖造藝</div>
+            <p className="muted">管理後台</p>
+            {user && <p className="text-sm text-red-700">{user.email} 沒有後台權限</p>}
+            {user
+              ? <button className="btn btn-ghost w-full" onClick={() => auth.signOut()}>登出並換帳號</button>
+              : <button className="btn btn-primary w-full !min-h-[48px]" onClick={() => auth.signInWithPopup(new firebase.auth.GoogleAuthProvider())}>使用 Google 帳號登入</button>}
+          </div>
+        </div>
+      );
+
+      return (
+        <div className="min-h-screen flex flex-wrap items-start">
+          <nav aria-label="後台選單" className="w-full md:w-60 md:min-h-screen md:sticky md:top-0 p-4 md:p-5 flex md:flex-col gap-1 overflow-x-auto bg-[#F8F3F6] border-b md:border-b-0 md:border-r border-[#EEDDE6]">
+            <div className="hidden md:block px-3 pb-5"><div className="serif text-2xl font-bold tracking-widest">指尖造藝</div><div className="text-sm muted">管理後台</div></div>
+            {nav.map(([k, l]) => (
+              <button key={k} aria-current={page === k ? 'page' : undefined} onClick={() => go(k)} className={`shrink-0 text-left min-h-[44px] px-3.5 rounded-xl font-bold flex items-center justify-between gap-2 ${page === k ? 'bg-[#FCE4EE] text-[#A8325F]' : 'hover:bg-white'}`}>
+                {l}{k === 'orders' && toShip > 0 && <span className="text-xs bg-[#A8325F] text-white rounded-full px-2 py-0.5">{toShip}</span>}
+              </button>
+            ))}
+            <div className="md:mt-6 flex md:flex-col gap-1 shrink-0">
+              <a href="shop.html" className="min-h-[44px] px-3.5 rounded-xl flex items-center muted text-sm hover:bg-white">查看商店 →</a>
+              <button onClick={() => auth.signOut()} className="text-left min-h-[44px] px-3.5 rounded-xl muted text-sm hover:bg-white">登出</button>
+            </div>
+          </nav>
+          <main className="flex-1 min-w-0 p-4 md:p-8 max-w-[1400px]">
+            {page === 'dashboard' && <Dashboard inventory={inventory} orders={orders} go={go} />}
+            {page === 'inventory' && <Inventory inventory={inventory} notify={notify} initialFilter={invFilter} />}
+            {page === 'new' && <NewStyle inventory={inventory} notify={notify} />}
+            {page === 'orders' && <Orders orders={orders} notify={notify} />}
+            {page === 'finance' && <Finance orders={orders} inventory={inventory} />}
+          </main>
+          <Toast toast={toast} onClose={() => setToast(null)} />
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

@@ -1,0 +1,29 @@
+rules_version = '2';
+
+// 指尖造藝：商品公開可讀，只有店家帳號可以修改；訂單與庫存紀錄只有店家能看。
+// 訂單由伺服器（/api，firebase-admin）寫入，不受這裡的規則限制。
+// 部署：firebase deploy --only firestore:rules
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner() {
+      return request.auth != null && request.auth.uid == 'MvkJo5e1kEcBS0fGGMr4RKdQjYg1';
+    }
+
+    // 商品：商店頁要讀，後台與建檔系統要寫
+    match /artifacts/nail-inventory-app/users/MvkJo5e1kEcBS0fGGMr4RKdQjYg1/inventory/{productId} {
+      allow read: if true;
+      allow write: if isOwner();
+    }
+
+    // 店家的訂單、進出貨紀錄等其他資料
+    match /artifacts/nail-inventory-app/users/MvkJo5e1kEcBS0fGGMr4RKdQjYg1/{collection}/{docId} {
+      allow read, write: if isOwner();
+    }
+
+    // 顧客「我的訂單」：只能讀自己的，不能自己改
+    match /artifacts/nail-inventory-app/users/{uid}/orders/{orderId} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+  }
+}
