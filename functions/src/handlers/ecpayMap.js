@@ -11,7 +11,8 @@ module.exports = async (req, res) => {
     MerchantTradeNo: ecpay.newMerchantTradeNo('MAP'),
     LogisticsType: 'CVS',
     LogisticsSubType: type,
-    IsCollection: 'N',
+    // 顧客可能選超商取貨付款，地圖一律以「代收」開啟，只列出可代收貨款的門市（代收時地圖請求也要帶 Y，guides/06）
+    IsCollection: 'Y',
     // 地圖選店結果專用端點，與物流狀態通知（logistics_notify）不同
     ServerReplyURL: `${ecpay.siteOrigin(req)}/api/ecpay/map-reply`,
   };

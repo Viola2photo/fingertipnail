@@ -4,6 +4,7 @@ const ecpay = require('../lib/ecpay');
 const { requireAdmin } = require('../lib/auth');
 const { ordersRef } = require('../lib/firebase');
 const { historyEntry, applyOrderUpdate } = require('../lib/orders');
+const { getSender, senderProblem } = require('../lib/shipping');
 
 const PRINT_ENDPOINTS = {
   UNIMARTC2C: '/Express/PrintUniMartC2COrderInfo',
@@ -15,11 +16,17 @@ const PRINT_ENDPOINTS = {
 async function createShipment(req, order, cfg) {
   if (order.status !== 'paid') throw new Error('只有「待出貨」的訂單可以建立物流單');
   if (order.shipping?.method !== 'CVS') throw new Error('這筆訂單不是超商取貨，請手動出貨並填寫追蹤編號');
-  const senderName = ecpay.envValue('SENDER_NAME');
-  const senderPhone = ecpay.envValue('SENDER_CELLPHONE');
-  if (!senderName || !senderPhone) throw new Error('請先設定寄件人 SENDER_NAME、SENDER_CELLPHONE（見 README「填入設定」）');
+  const sender = await getSender();
+  const problem = senderProblem(sender);
+  if (problem) throw new Error(problem);
+  const receiverName = ecpay.logisticsName(order.customerInfo?.name);
+  if (!receiverName) throw new Error(`收件人姓名「${order.customerInfo?.name || ''}」不符合超商規定（${ecpay.LOGISTICS_NAME_RULE}），請在訂單裡修改收件人姓名`);
 
-  const amount = Math.min(20000, Math.max(1, Number(order.totalAmount) || 1));
+  // 取貨付款：顧客到店付的金額＝訂單總額；超商代收上限 20,000 元
+  const cod = order.payment?.paymentType === 'COD';
+  const total = Number(order.totalAmount) || 0;
+  if (cod && (total < 1 || total > 20000)) throw new Error('取貨付款金額需在 1～20,000 元之間');
+  const amount = cod ? total : Math.min(20000, Math.max(1, total || 1));
   const params = {
     MerchantID: cfg.merchantId,
     MerchantTradeNo: ecpay.newMerchantTradeNo('LG'),
@@ -28,16 +35,16 @@ async function createShipment(req, order, cfg) {
     LogisticsSubType: order.shipping.subType,
     GoodsAmount: String(amount),
     GoodsName: '穿戴甲',
-    IsCollection: 'N',
-    SenderName: senderName,
-    SenderCellPhone: senderPhone,
-    ReceiverName: order.customerInfo.name,
+    IsCollection: cod ? 'Y' : 'N',
+    SenderName: ecpay.logisticsName(sender.name),
+    SenderCellPhone: sender.phone,
+    ReceiverName: receiverName,
     ReceiverCellPhone: order.customerInfo.phone,
     ReceiverStoreID: order.shipping.id,
     ServerReplyURL: `${ecpay.callbackBase(req)}/api/ecpay/logistics-notify`,
   };
-  // 7-ELEVEN 需另帶 CollectionAmount 且等於 GoodsAmount（guides/06 §超商取貨建單）
-  if (params.LogisticsSubType === 'UNIMARTC2C') params.CollectionAmount = params.GoodsAmount;
+  // 7-ELEVEN 需另帶 CollectionAmount 且等於 GoodsAmount（guides/06 §超商取貨建單）；取貨付款時各超商都帶代收金額
+  if (cod || params.LogisticsSubType === 'UNIMARTC2C') params.CollectionAmount = params.GoodsAmount;
   params.CheckMacValue = ecpay.generateCheckMacValue(params, cfg.hashKey, cfg.hashIv, 'md5');
 
   const result = ecpay.parsePipeResponse(await ecpay.postForm(`${cfg.host}/Express/Create`, params));

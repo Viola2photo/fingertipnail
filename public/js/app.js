@@ -9,6 +9,12 @@ const totalStock = (p) => SIZES.reduce((s, k) => s + Number(p.stock?.[k] || 0), 
 const firstImage = (p) => (p?.media || []).find((m) => m.type !== 'video')?.url || '';
 const textOf = (p) => `${p.name || ''} ${p.description || ''} ${p.hashtags || ''}`;
 const moodsOf = (p) => MOODS.filter((m) => m.words.some((w) => textOf(p).includes(w))).map((m) => m.key);
+// 超商取貨核對證件，綠界規定姓名為中文 2～5 字或英文 4～10 個字母（與伺服器 logisticsName 相同）
+const validPickupName = (name) => {
+  const s = String(name || '').replace(/\s+/g, '');
+  const n = Array.from(s).length;
+  return (/^\p{Script=Han}+$/u.test(s) && n >= 2 && n <= 5) || (/^[A-Za-z]+$/.test(s) && n >= 4 && n <= 10);
+};
 const isInAppBrowser = () => /Line\/|FBAN|FBAV|Instagram/i.test(navigator.userAgent);
 
 function parseRoute() {
@@ -103,7 +109,7 @@ function Footer() {
           <strong class="serif" style="font-size:22px;letter-spacing:.12em">${SITE.name}</strong>
           讓每一次打扮都沒有負擔，隨時換上最新流行。
         </div>
-        <div style="flex:1 1 200px"><strong>付款方式</strong>綠界 ECPay：信用卡、ATM 轉帳、超商代碼</div>
+        <div style="flex:1 1 200px"><strong>付款方式</strong>綠界 ECPay：信用卡、ATM 轉帳、超商代碼；超商取貨付款</div>
         <div style="flex:1 1 200px"><strong>配送方式</strong>7-ELEVEN／全家 超商取貨<br />滿 ${money(SITE.freeShippingThreshold)} 免運，未滿運費 ${money(SITE.shippingFee)}</div>
         <div style="flex:1 1 200px"><strong>聯絡我們</strong><a href=${`mailto:${SITE.contactEmail}`}>${SITE.contactEmail}</a></div>
       </div>
@@ -411,6 +417,7 @@ function CartDrawer({ cart, setCart, onClose, promo, setPromo, quote }) {
 function Checkout({ cart, user, quote, promo }) {
   const [form, setForm] = useState({ name: user?.displayName || '', phone: '', email: user?.email || '' });
   const [method, setMethod] = useState('UNIMARTC2C');
+  const [payment, setPayment] = useState('online');
   const [store, setStore] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -432,17 +439,21 @@ function Checkout({ cart, user, quote, promo }) {
     e.preventDefault();
     setError('');
     if (!storeOk) return setError('請先選擇取貨門市');
+    if (!validPickupName(form.name)) return setError('姓名請填證件上的姓名：中文 2～5 字，或英文 4～10 個字母');
     setBusy(true);
     try {
       const res = await postJson('/api/checkout', {
         items: cart.map((l) => ({ id: l.id, size: l.size, quantity: l.qty })),
         promoCode: promo, name: form.name, phone: form.phone,
         store,
+        paymentMethod: payment,
         // 目前不在結帳頁選發票；之後開啟電子發票時，預設開立雲端發票
         invoice: { type: 'cloud', email: form.email },
       }, true);
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.action) throw new Error(data.error || '結帳失敗，請稍後再試');
+      if (!res.ok || (!data.action && !data.cod)) throw new Error(data.error || '結帳失敗，請稍後再試');
+      // 取貨付款：訂單已成立，不用到綠界付款頁
+      if (data.cod) return location.assign(`${location.pathname}?order=cod&no=${encodeURIComponent(data.orderNo)}`);
       submitForm(data.action, data.fields);
     } catch (err) {
       setError(err.message);
@@ -461,7 +472,7 @@ function Checkout({ cart, user, quote, promo }) {
         <section class="panel">
           <h2>收件人</h2>
           <div class="fields">
-            <label class="field">姓名（取貨核對用）<input required maxlength="20" autocomplete="name" value=${form.name} onInput=${set('name')} /></label>
+            <label class="field">姓名（取貨核對用）<input required maxlength="20" autocomplete="name" value=${form.name} onInput=${set('name')} /><small>${form.name && !validPickupName(form.name) ? html`<span style="color:#B42318">請填證件上的姓名：中文 2～5 字，或英文 4～10 個字母</span>` : '請填證件上的姓名，取貨時店員會核對'}</small></label>
             <label class="field">手機號碼<input required type="tel" inputmode="numeric" pattern="09[0-9]{8}" placeholder="0912345678" autocomplete="tel" value=${form.phone} onInput=${set('phone')} /><small>09 開頭 10 碼，取貨通知用</small></label>
             <label class="field">Email（選填）<input type="email" autocomplete="email" value=${form.email} onInput=${set('email')} /><small>方便我們聯絡你</small></label>
           </div>
@@ -478,6 +489,13 @@ function Checkout({ cart, user, quote, promo }) {
           </div>
         </section>
 
+        <section class="panel">
+          <h2>付款方式</h2>
+          <div class="options">
+            <button type="button" class="option" aria-pressed=${payment === 'online'} onClick=${() => setPayment('online')}><strong>線上付款</strong><span>信用卡、ATM 轉帳、超商代碼</span></button>
+            <button type="button" class="option" aria-pressed=${payment === 'cod'} onClick=${() => setPayment('cod')}><strong>超商取貨付款</strong><span>到門市取貨時再付款</span></button>
+          </div>
+        </section>
       </div>
 
       <aside class="checkout-side panel">
@@ -487,8 +505,8 @@ function Checkout({ cart, user, quote, promo }) {
         </div>
         <${Summary} cart=${cart} quote=${quote} />
         ${error && html`<div class="notice notice-pink" role="alert" style="margin-top:12px">${error}</div>`}
-        <button class="btn btn-primary" type="submit" style="width:100%;margin-top:16px" disabled=${busy || !!quote.error || quote.loading}>${busy ? '前往綠界付款…' : '前往綠界付款'}</button>
-        <p class="muted" style="font-size:12px;margin:10px 0 0">付款由綠界科技 ECPay 處理，本站不儲存信用卡資料。${!user ? ' 登入後下單可在「我的訂單」查看進度。' : ''}</p>
+        <button class="btn btn-primary" type="submit" style="width:100%;margin-top:16px" disabled=${busy || !!quote.error || quote.loading}>${payment === 'cod' ? (busy ? '送出訂單中…' : '送出訂單（取貨付款）') : (busy ? '前往綠界付款…' : '前往綠界付款')}</button>
+        <p class="muted" style="font-size:12px;margin:10px 0 0">${payment === 'cod' ? '包裹到店後會有簡訊通知，請在期限內到門市付款取貨。' : '付款由綠界科技 ECPay 處理，本站不儲存信用卡資料。'}${!user ? ' 登入後下單可在「我的訂單」查看進度。' : ''}</p>
       </aside>
     </form>`;
 }
@@ -510,7 +528,8 @@ function Orders({ user, banner }) {
         : orders === null ? html`<div class="empty">載入中…</div>`
         : orders.length === 0 ? html`<div class="empty">還沒有訂單，<a href="#/">去逛逛</a></div>`
         : html`<div style="display:flex;flex-direction:column;gap:16px">${orders.map((o) => {
-            const [label, chip] = ORDER_STATUS[o.status] || [o.status, 'chip-white'];
+            const cod = o.payment?.paymentType === 'COD';
+            const [label, chip] = cod && o.status === 'paid' ? ['準備出貨（取貨付款）', 'chip-sky'] : ORDER_STATUS[o.status] || [o.status, 'chip-white'];
             return html`
               <article class="order-card">
                 <div class="line-row">
@@ -560,8 +579,10 @@ function App() {
     if (!result) return;
     setBanner(result === 'success'
       ? `付款成功！訂單編號 ${params.get('no') || ''}，我們會盡快為你出貨。`
-      : `訂單 ${params.get('no') || ''} 已建立。若選擇 ATM 或超商代碼，請在期限內完成繳費。`);
-    if (result === 'success') setCart([]);
+      : result === 'cod'
+        ? `訂單 ${params.get('no') || ''} 已成立！我們會盡快出貨，包裹到店後請到門市付款取貨。`
+        : `訂單 ${params.get('no') || ''} 已建立。若選擇 ATM 或超商代碼，請在期限內完成繳費。`);
+    if (result === 'success' || result === 'cod') setCart([]);
     history.replaceState(null, '', `${location.pathname}#/orders`);
     setRoute({ name: 'orders' });
   }, []);

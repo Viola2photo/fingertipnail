@@ -139,6 +139,19 @@ function cleanText(text, maxChars) {
   return Array.from(cleaned).slice(0, maxChars).join('');
 }
 
+// 超商物流的寄件人／收件人姓名規則（物流整合 API「門市訂單建立」）：
+// 中文 2～5 字，或英文 4～10 個字母；不可有數字、符號或表情符號。
+// 英文姓名中間的空白先拿掉再送綠界（例：Viola Chang → ViolaChang），不合規則回傳空字串。
+function logisticsName(name) {
+  const compact = String(name || '').replace(/\s+/g, '');
+  const chars = Array.from(compact);
+  if (/^\p{Script=Han}+$/u.test(compact) && chars.length >= 2 && chars.length <= 5) return compact;
+  if (/^[A-Za-z]+$/.test(compact) && chars.length >= 4 && chars.length <= 10) return compact;
+  return '';
+}
+
+const LOGISTICS_NAME_RULE = '中文 2～5 字，或英文 4～10 個字母，不可有數字或符號';
+
 function escapeHtml(value) {
   return String(value)
     .replace(/&/g, '&amp;')
@@ -220,6 +233,8 @@ module.exports = {
   taipeiDateTime,
   newMerchantTradeNo,
   cleanText,
+  logisticsName,
+  LOGISTICS_NAME_RULE,
   escapeHtml,
   autoSubmitForm,
   parsePipeResponse,

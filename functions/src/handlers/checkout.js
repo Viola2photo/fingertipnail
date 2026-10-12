@@ -5,6 +5,7 @@ const { db, ordersRef, customerOrderRef } = require('../lib/firebase');
 const { verifyUser } = require('../lib/auth');
 const { priceCart, CartError } = require('../lib/cart');
 const { normalizeInvoiceRequest } = require('../lib/invoice');
+const { markOrderPaid } = require('../lib/payment');
 
 const CVS_SUBTYPES = ['UNIMARTC2C', 'FAMIC2C', 'HILIFEC2C', 'OKMARTC2C'];
 
@@ -20,6 +21,8 @@ module.exports = async (req, res) => {
     const name = ecpay.cleanText(body.name, 20);
     const phone = String(body.phone || '').replace(/\D/g, '');
     if (!name) return fail(res, 400, '請填寫收件人姓名');
+    // 超商取貨要核對證件，綠界對姓名有格式限制，下單時就先檢查，避免出貨時才建不了物流單
+    if (!ecpay.logisticsName(name)) return fail(res, 400, `收件人姓名需與證件相同：${ecpay.LOGISTICS_NAME_RULE}`);
     if (!/^09\d{8}$/.test(phone)) return fail(res, 400, '手機號碼需為 09 開頭 10 碼');
 
     // 超商門市（綠界電子地圖選店結果）；目前只提供超商取貨，不開放宅配
@@ -31,7 +34,11 @@ module.exports = async (req, res) => {
     const { invoice, error } = normalizeInvoiceRequest(body.invoice, phone);
     if (error) return fail(res, 400, error);
 
+    // 付款方式：online＝綠界線上付款（信用卡／ATM／超商代碼）；cod＝超商取貨付款
+    const cod = body.paymentMethod === 'cod';
+
     const { lines, totals } = await priceCart(body.items, body.promoCode);
+    if (cod && totals.total > 20000) return fail(res, 400, '取貨付款金額上限為 20,000 元，請改用線上付款');
 
     // 有登入就把訂單同步到顧客的「我的訂單」（uid 由伺服器驗證 token 取得，不信任前端）
     const user = await verifyUser(req);
@@ -49,13 +56,19 @@ module.exports = async (req, res) => {
       invoice,
       status: 'pending',
       createdAt: now,
-      history: [{ at: now, status: 'pending', note: '建立訂單，等待付款' }],
+      history: [{ at: now, status: 'pending', note: cod ? '建立訂單（超商取貨付款）' : '建立訂單，等待付款' }],
     };
 
     const batch = db.batch();
     batch.set(ordersRef().doc(merchantTradeNo), order);
     if (user) batch.set(customerOrderRef(user.uid, merchantTradeNo), order);
     await batch.commit();
+
+    // 取貨付款不經過綠界付款頁：訂單直接成立並扣庫存，等店家出貨
+    if (cod) {
+      await markOrderPaid(merchantTradeNo, { tradeNo: '', paymentType: 'COD', paymentDate: '', tradeAmt: totals.total, fee: 0, simulated: false });
+      return res.status(200).json({ orderNo: merchantTradeNo, cod: true });
+    }
 
     const cfg = ecpay.paymentConfig();
     const origin = ecpay.siteOrigin(req);

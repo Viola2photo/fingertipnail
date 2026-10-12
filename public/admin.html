@@ -58,6 +58,15 @@
     const inventoryCol = shopRoot.collection('inventory');
     const ordersCol = shopRoot.collection('orders');
     const movementsCol = shopRoot.collection('stockMovements');
+    const shippingSettingsDoc = shopRoot.collection('settings').doc('shipping');
+    // 超商物流的姓名規則（與伺服器 logisticsName 相同）：中文 2～5 字，或英文 4～10 個字母
+    const validPickupName = (name) => {
+      const s = String(name || '').replace(/\s+/g, '');
+      const n = Array.from(s).length;
+      return (/^\p{Script=Han}+$/u.test(s) && n >= 2 && n <= 5) || (/^[A-Za-z]+$/.test(s) && n >= 4 && n <= 10);
+    };
+    const isCod = (o) => o?.payment?.paymentType === 'COD';
+    const payLabel = (o) => isCod(o) ? (o.payment.collected ? '取貨付款（已收款）' : '取貨付款') : (o.payment?.paymentType || '');
 
     const { useState, useEffect, useMemo, useRef, useCallback } = React;
 
@@ -178,9 +187,10 @@
 
     // ---------- 小元件 ----------
     function Toast({ toast, onClose }) {
-      useEffect(() => { if (toast) { const t = setTimeout(onClose, 3500); return () => clearTimeout(t); } }, [toast]);
+      // 錯誤訊息停留久一點（點一下可關閉），才看得清楚失敗原因
+      useEffect(() => { if (toast) { const t = setTimeout(onClose, toast.type === 'error' ? 12000 : 3500); return () => clearTimeout(t); } }, [toast]);
       if (!toast) return null;
-      return <div role="status" className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-xl text-white font-bold text-sm ${toast.type === 'error' ? 'bg-red-700' : 'bg-[#2E1F33]'}`}>{toast.message}</div>;
+      return <button type="button" role={toast.type === 'error' ? 'alert' : 'status'} onClick={onClose} className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 max-w-[90vw] text-left px-5 py-3 rounded-2xl shadow-xl text-white font-bold text-sm ${toast.type === 'error' ? 'bg-red-700' : 'bg-[#2E1F33]'}`}>{toast.message}{toast.type === 'error' && <span className="block text-xs font-normal opacity-80 mt-1">點一下關閉</span>}</button>;
     }
 
     function Modal({ title, onClose, children, wide }) {
@@ -809,6 +819,8 @@
       const [tracking, setTracking] = useState('');
       const [restock, setRestock] = useState(true);
       const [query, setQuery] = useState(null);
+      const [receiver, setReceiver] = useState(order.customerInfo?.name || '');
+      const receiverOk = validPickupName(order.customerInfo?.name);
       const run = async (label, fn) => {
         setBusy(label);
         try { await fn(); } catch (e) { notify(e.message, 'error'); }
@@ -846,25 +858,36 @@
                 {t.promoDiscount > 0 && <div className="flex justify-between"><span>{t.promo?.name}</span><span>−{money(t.promoDiscount)}</span></div>}
                 <div className="flex justify-between"><span>運費</span><span>{money(t.shippingFee)}</span></div>
                 <div className="flex justify-between font-bold text-base pt-1"><span>合計</span><span>{money(order.totalAmount)}</span></div>
-                {order.payment && <div className="flex justify-between muted text-xs pt-1"><span>{order.payment.paymentType}{order.payment.simulated && '（模擬付款）'}</span><span>綠界手續費 {money(order.payment.fee)}</span></div>}
+                {order.payment && <div className="flex justify-between muted text-xs pt-1"><span>{payLabel(order)}{order.payment.simulated && '（模擬付款）'}</span>{!isCod(order) && <span>綠界手續費 {money(order.payment.fee)}</span>}</div>}
+                {isCod(order) && !order.payment.collected && <div className="text-xs text-[#8A4413] pt-1">顧客到店取貨時付款 {money(order.totalAmount)}，綠界代收後撥款</div>}
               </div>
               <div className="space-y-1">
                 <div><span className="muted">收件人</span> {order.customerInfo?.name} ・ {order.customerInfo?.phone}</div>
+                {!receiverOk && !order.logistics?.id && order.status !== 'cancelled' && (
+                  <div className="rounded-xl bg-orange-50 p-3 space-y-2">
+                    <p className="text-[#8A4413]">收件人姓名不符合超商規定（中文 2～5 字，或英文 4～10 個字母），建立物流單前請先修改成顧客證件上的姓名。</p>
+                    <div className="flex gap-2"><label className="sr-only" htmlFor="rcv">收件人姓名</label><input id="rcv" className="input" value={receiver} onChange={e => setReceiver(e.target.value)} /><button className="btn btn-ghost shrink-0" disabled={!!busy || !validPickupName(receiver)} onClick={() => act('receiver', { name: receiver })}>儲存姓名</button></div>
+                  </div>
+                )}
                 <div><span className="muted">取貨</span> {order.customerInfo?.address}</div>
                 {order.paymentInfo?.vAccount && <div><span className="muted">ATM</span> {order.paymentInfo.bankCode}-{order.paymentInfo.vAccount}（期限 {order.paymentInfo.expireDate}）</div>}
                 {order.paymentInfo?.paymentNo && <div><span className="muted">超商代碼</span> {order.paymentInfo.paymentNo}（期限 {order.paymentInfo.expireDate}）</div>}
                 {order.logistics?.id && <div><span className="muted">物流單</span> {order.logistics.id} ・ 寄貨編號 {order.logistics.cvsPaymentNo}{order.logistics.lastStatus && ` ・ ${order.logistics.lastStatus.message}`}</div>}
                 {order.manualTrackingNo && <div><span className="muted">追蹤編號</span> {order.manualTrackingNo}</div>}
                 {(order.oversold || []).length > 0 && <div className="text-red-700 font-bold">付款時庫存不足：{order.oversold.join('、')}</div>}
+                {order.logisticsIssue && !['cancelled', 'completed'].includes(order.status) && <div className="text-red-700 font-bold">物流異常：{order.logisticsIssue}。顧客未取貨時，可取消訂單並把商品退回庫存。</div>}
               </div>
             </div>
             <div className="space-y-4">
               <div className="space-y-2">
                 <h3 className="font-bold">出貨</h3>
-                {order.status === 'paid' && order.shipping?.method === 'CVS' && <button className="btn btn-primary w-full" disabled={!!busy} onClick={createShipment}>{busy === 'create' ? '建立中…' : '建立綠界超商物流單'}</button>}
+                {order.status === 'paid' && order.shipping?.method === 'CVS' && <button className="btn btn-primary w-full" disabled={!!busy} onClick={createShipment}>{busy === 'create' ? '建立中…' : isCod(order) ? '建立綠界超商物流單（代收貨款）' : '建立綠界超商物流單'}</button>}
+                {order.logistics?.cvsPaymentNo && <p className="text-sm bg-[#F8F3F6] rounded-xl p-3">寄貨編號 <strong className="text-base">{order.logistics.cvsPaymentNo}</strong>{order.logistics.cvsValidationNo && <> ・ 驗證碼 <strong>{order.logistics.cvsValidationNo}</strong></>}<span className="block text-xs muted mt-1">{order.logistics.subType === 'FAMIC2C' ? '到全家 FamiPort 輸入寄貨編號列印單據後寄件，或列印託運單貼在包裹上。' : '到 7-ELEVEN ibon 輸入寄貨編號與驗證碼列印單據後寄件，或列印託運單貼在包裹上。'}</span></p>}
                 {order.logistics?.id && <div className="flex gap-2"><button className="btn btn-ghost flex-1" disabled={!!busy} onClick={printLabel}>列印託運單</button><button className="btn btn-ghost flex-1" disabled={!!busy} onClick={queryShipment}>查詢物流</button></div>}
                 {['paid', 'shipping'].includes(order.status) && (
-                  <div className="flex gap-2"><label className="sr-only" htmlFor="trk">追蹤編號</label><input id="trk" className="input" placeholder="宅配追蹤編號（選填）" value={tracking} onChange={e => setTracking(e.target.value)} /><button className="btn btn-ghost shrink-0" disabled={!!busy} onClick={() => act('ship', { trackingNo: tracking })}>標記已出貨</button></div>
+                  <details className="text-xs muted"><summary className="cursor-pointer">沒有用綠界物流單、自己寄出時</summary>
+                    <div className="flex gap-2 mt-2"><label className="sr-only" htmlFor="trk">追蹤編號</label><input id="trk" className="input" placeholder="追蹤編號（選填）" value={tracking} onChange={e => setTracking(e.target.value)} /><button className="btn btn-ghost shrink-0" disabled={!!busy} onClick={() => act('ship', { trackingNo: tracking })}>標記已出貨</button></div>
+                  </details>
                 )}
                 {['shipping', 'shipped'].includes(order.status) && <button className="btn btn-ghost w-full" disabled={!!busy} onClick={() => act('complete')}>顧客已取貨，標記完成</button>}
               </div>
@@ -872,10 +895,10 @@
                 <h3 className="font-bold">電子發票</h3>
                 {order.invoiceNo
                   ? <p className="text-sm">已開立：<strong>{order.invoiceNo}</strong>{order.invoiceInfo?.invoiceDate && `（${order.invoiceInfo.invoiceDate}）`}</p>
-                  : <p className="text-sm muted">{order.invoiceStatus === 'pending' ? '排程開立中（約 10 分鐘內）' : order.invoiceStatus === 'error' ? '' : PAID.includes(order.status) ? '尚未開立' : '付款後開立'}</p>}
+                  : <p className="text-sm muted">{order.invoiceStatus === 'pending' ? '排程開立中（約 10 分鐘內）' : order.invoiceStatus === 'error' ? '' : isCod(order) && !order.payment.collected ? '顧客取貨付款後開立' : PAID.includes(order.status) ? '尚未開立' : '付款後開立'}</p>}
                 {order.invoiceError && !order.invoiceNo && <p className="text-sm text-red-700">開立失敗：{order.invoiceError}</p>}
                 {order.invoice && <p className="text-xs muted">顧客選擇：{{ cloud: '雲端發票', mobile: `手機條碼 ${order.invoice.carrierNum}`, donate: `捐贈（愛心碼 ${order.invoice.loveCode}）` }[order.invoice.type]}</p>}
-                {PAID.includes(order.status) && !order.invoiceNo && <button className="btn btn-ghost w-full" disabled={!!busy} onClick={issueInvoice}>{busy === 'invoice' ? '開立中…' : '立即開立電子發票'}</button>}
+                {PAID.includes(order.status) && !order.invoiceNo && !(isCod(order) && !order.payment.collected) && <button className="btn btn-ghost w-full" disabled={!!busy} onClick={issueInvoice}>{busy === 'invoice' ? '開立中…' : '立即開立電子發票'}</button>}
               </div>
               <div className="space-y-2">
                 <h3 className="font-bold">綠界</h3>
@@ -886,7 +909,7 @@
                 <div className="space-y-2 border-t border-[#F3E9EF] pt-4">
                   <h3 className="font-bold">取消訂單</h3>
                   {PAID.includes(order.status) && <label className="flex items-center gap-2"><input type="checkbox" className="w-5 h-5" checked={restock} onChange={e => setRestock(e.target.checked)} />商品退回庫存</label>}
-                  {PAID.includes(order.status) && <p className="text-xs muted">已付款訂單取消後需另行退款：信用卡在綠界後台退刷，ATM／超商付款需自行退款給顧客。</p>}
+                  {PAID.includes(order.status) && <p className="text-xs muted">{isCod(order) ? (order.payment.collected ? '顧客已付款，取消後需自行退款給顧客。' : '取貨付款尚未收款，取消不需退款。包裹已寄出時，請到綠界後台處理退貨。') : '已付款訂單取消後需另行退款：信用卡在綠界後台退刷，ATM／超商付款需自行退款給顧客。'}</p>}
                   <button className="btn btn-ghost w-full !text-red-700 !border-red-200" disabled={!!busy} onClick={() => confirm('確定取消這筆訂單？') && act('cancel', { restock })}>取消訂單</button>
                 </div>
               )}
@@ -903,9 +926,38 @@
     function printPickList(orders) {
       const w = window.open('', '_blank');
       const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-      const rows = orders.map(o => `<tr><td>${esc(o.merchantTradeNo)}</td><td>${esc(o.customerInfo?.name)}</td><td>${o.items.map(i => `${esc(i.id)} ${esc(i.name)} <b>${esc(i.size)}</b> ×${i.quantity}`).join('<br>')}</td><td>${esc(o.customerInfo?.address)}</td></tr>`).join('');
-      w.document.write(`<!DOCTYPE html><meta charset="utf-8"><title>揀貨單</title><style>body{font-family:sans-serif;padding:24px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #999;padding:8px;font-size:13px;text-align:left;vertical-align:top}</style><h2>揀貨單（${orders.length} 筆）</h2><table><tr><th>訂單</th><th>收件人</th><th>商品</th><th>取貨</th></tr>${rows}</table><script>print()<\/script>`);
+      const rows = orders.map(o => `<tr><td>${esc(o.merchantTradeNo)}</td><td>${esc(o.customerInfo?.name)}</td><td>${o.items.map(i => `${esc(i.id)} ${esc(i.name)} <b>${esc(i.size)}</b> ×${i.quantity}`).join('<br>')}</td><td>${esc(o.customerInfo?.address)}</td><td>${esc(o.logistics?.cvsPaymentNo || '')}${o.logistics?.cvsValidationNo ? `<br>驗證碼 ${esc(o.logistics.cvsValidationNo)}` : ''}</td><td>${o.payment?.paymentType === 'COD' ? `取貨付款<br><b>NT$${Number(o.totalAmount).toLocaleString()}</b>` : '已付款'}</td></tr>`).join('');
+      w.document.write(`<!DOCTYPE html><meta charset="utf-8"><title>揀貨單</title><style>body{font-family:sans-serif;padding:24px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #999;padding:8px;font-size:13px;text-align:left;vertical-align:top}</style><h2>揀貨單（${orders.length} 筆）</h2><table><tr><th>訂單</th><th>收件人</th><th>商品</th><th>取貨</th><th>寄貨編號</th><th>付款</th></tr>${rows}</table><script>print()<\/script>`);
       w.document.close();
+    }
+
+    // 出貨設定：寄件人姓名與手機（建立超商物流單必填），存在 Firestore，不用重新部署
+    function ShippingSettings({ onClose, notify }) {
+      const [form, setForm] = useState(null);
+      const [saving, setSaving] = useState(false);
+      useEffect(() => { shippingSettingsDoc.get().then(d => setForm({ senderName: '', senderPhone: '', ...(d.exists ? d.data() : {}) })).catch(e => notify(e.message, 'error')); }, []);
+      const nameOk = form && validPickupName(form.senderName);
+      const phoneOk = form && /^09\d{8}$/.test(form.senderPhone);
+      const save = async () => {
+        setSaving(true);
+        try { await shippingSettingsDoc.set({ senderName: form.senderName.trim(), senderPhone: form.senderPhone.trim(), updatedAt: new Date().toISOString() }, { merge: true }); notify('已儲存出貨設定'); onClose(); }
+        catch (e) { notify(e.message, 'error'); }
+        setSaving(false);
+      };
+      return (
+        <Modal title="出貨設定" onClose={onClose}>
+          {!form ? <p className="muted">載入中…</p> : (
+            <div className="space-y-4 text-sm">
+              <p className="muted">建立超商物流單時使用的寄件人資料。店到店包裹若顧客沒取，會退回寄件門市，要憑證件領回，所以請填本人姓名，不要填店名。</p>
+              <label className="block space-y-1"><span className="font-bold">寄件人姓名</span><input className="input" value={form.senderName} onChange={e => setForm({ ...form, senderName: e.target.value })} placeholder="例如 張力予" />
+                <span className={`text-xs ${form.senderName && !nameOk ? 'text-red-700' : 'muted'}`}>中文 2～5 字，或英文 4～10 個字母，不可有數字或符號</span></label>
+              <label className="block space-y-1"><span className="font-bold">寄件人手機</span><input className="input" inputMode="numeric" value={form.senderPhone} onChange={e => setForm({ ...form, senderPhone: e.target.value.replace(/\D/g, '') })} placeholder="0912345678" />
+                <span className={`text-xs ${form.senderPhone && !phoneOk ? 'text-red-700' : 'muted'}`}>09 開頭 10 碼</span></label>
+              <button className="btn btn-primary w-full" disabled={!nameOk || !phoneOk || saving} onClick={save}>{saving ? '儲存中…' : '儲存'}</button>
+            </div>
+          )}
+        </Modal>
+      );
     }
 
     function Orders({ orders, notify }) {
@@ -914,8 +966,13 @@
       const [openId, setOpenId] = useState(null);
       const [selected, setSelected] = useState([]);
       const [bulk, setBulk] = useState('');
+      const [settingsOpen, setSettingsOpen] = useState(false);
+      const [sender, setSender] = useState(undefined);
+      useEffect(() => shippingSettingsDoc.onSnapshot(d => setSender(d.exists ? d.data() : null), () => setSender(null)), []);
+      const senderReady = sender && validPickupName(sender.senderName) && /^09\d{8}$/.test(sender.senderPhone || '');
       const tabs = [['all', '全部'], ['awaiting', '待付款'], ['paid', '待出貨'], ['shipping', '已建物流單'], ['shipped', '已出貨'], ['completed', '已完成'], ['issue', '需處理'], ['cancelled', '已取消']];
-      const match = (o, k) => k === 'all' || (k === 'awaiting' ? ['pending', 'awaiting_payment'].includes(o.status) : k === 'issue' ? (o.status === 'amount_mismatch' || (o.oversold || []).length > 0) : o.status === k);
+      const hasIssue = (o) => o.status === 'amount_mismatch' || (o.oversold || []).length > 0 || (o.logisticsIssue && !['cancelled', 'completed'].includes(o.status));
+      const match = (o, k) => k === 'all' || (k === 'awaiting' ? ['pending', 'awaiting_payment'].includes(o.status) : k === 'issue' ? hasIssue(o) : o.status === k);
       const rows = orders.filter(o => match(o, tab) && (!q || `${o.merchantTradeNo} ${o.customerInfo?.name} ${o.customerInfo?.phone} ${o.items?.map(i => i.name).join(' ')}`.includes(q)));
       const open = orders.find(o => o.merchantTradeNo === openId);
       const shippable = rows.filter(o => o.status === 'paid' && o.shipping?.method === 'CVS');
@@ -923,13 +980,16 @@
       const bulkCreate = async () => {
         const list = orders.filter(o => selected.includes(o.merchantTradeNo) && o.status === 'paid' && o.shipping?.method === 'CVS');
         let ok = 0;
-        for (const o of list) {
-          setBulk(`建立物流單 ${ok + 1}/${list.length}`);
+        const failed = [];
+        for (const [i, o] of list.entries()) {
+          setBulk(`建立物流單 ${i + 1}/${list.length}`);
           try { await apiPost('/api/admin/logistics', { action: 'create', orderId: o.merchantTradeNo }); ok++; }
-          catch (e) { notify(`${o.merchantTradeNo}：${e.message}`, 'error'); }
+          catch (e) { failed.push(`${o.merchantTradeNo}：${e.message}`); }
         }
         setBulk(''); setSelected([]);
-        notify(`已建立 ${ok} 張物流單`);
+        // 失敗原因要留在畫面上，不能被「已建立 N 張」蓋掉
+        if (failed.length) notify(`已建立 ${ok} 張，${failed.length} 張失敗。${failed[0]}${failed.length > 1 ? `（另有 ${failed.length - 1} 筆）` : ''}`, 'error');
+        else { notify(`已建立 ${ok} 張物流單，可到「已建物流單」查看寄貨編號`); setTab('shipping'); }
       };
 
       return (
@@ -937,10 +997,23 @@
           <div className="flex flex-wrap justify-between items-end gap-3">
             <div><h1 className="serif text-3xl font-bold">訂單與出貨</h1><p className="muted text-sm mt-1">付款與物流狀態由綠界自動回傳更新</p></div>
             <div className="flex flex-wrap gap-2">
+              <button className="btn btn-ghost" onClick={() => setSettingsOpen(true)}>出貨設定</button>
               <button className="btn btn-ghost" disabled={!rows.length} onClick={() => printPickList(selected.length ? orders.filter(o => selected.includes(o.merchantTradeNo)) : rows)}>列印揀貨單</button>
               <button className="btn btn-primary" disabled={!selected.length || !!bulk} onClick={bulkCreate}>{bulk || `批次建立物流單（${selected.length}）`}</button>
             </div>
           </div>
+          {sender !== undefined && !senderReady && (
+            <div className="rounded-2xl p-4 bg-orange-50 text-[#8A4413] text-sm flex flex-wrap gap-3 items-center justify-between">
+              <span>還沒填寄件人資料，建立超商物流單前請先完成「出貨設定」。</span>
+              <button className="btn btn-primary !min-h-[36px]" onClick={() => setSettingsOpen(true)}>填寫寄件人</button>
+            </div>
+          )}
+          <ol className="card p-4 grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
+            <li><strong className="text-[#A8325F]">1　勾選待出貨訂單</strong><span className="block muted text-xs mt-1">在「待出貨」分頁勾選，按「批次建立物流單」</span></li>
+            <li><strong className="text-[#A8325F]">2　列印揀貨單、包貨</strong><span className="block muted text-xs mt-1">依揀貨單的款式與尺寸裝袋</span></li>
+            <li><strong className="text-[#A8325F]">3　到超商寄件</strong><span className="block muted text-xs mt-1">7-ELEVEN 用 ibon、全家用 FamiPort 輸入寄貨編號，或列印託運單貼上</span></li>
+            <li><strong className="text-[#A8325F]">4　自動更新狀態</strong><span className="block muted text-xs mt-1">寄出、到店、顧客取貨都由綠界自動回傳；取貨付款在顧客取貨後入帳</span></li>
+          </ol>
           <div role="tablist" className="flex flex-wrap gap-2 items-center">
             {tabs.map(([k, l]) => <button key={k} role="tab" aria-selected={tab === k} className={`chip ${tab === k ? 'chip-on' : ''}`} onClick={() => { setTab(k); setSelected([]); }}>{l} {orders.filter(o => match(o, k)).length}</button>)}
             <label className="sr-only" htmlFor="ord-q">搜尋訂單</label>
@@ -959,8 +1032,8 @@
                   <span className="muted">{fmtTime(o.createdAt)}</span>
                   <span className="leading-6">{o.items?.map(i => `${i.name} ${i.size}×${i.quantity}`).join('、')}<span className="block text-xs muted">{o.customerInfo?.name}</span></span>
                   <strong>{money(o.totalAmount)}</strong>
-                  <span className="text-xs">{o.payment?.paymentType || (o.paymentInfo ? `待繳：${o.paymentInfo.paymentType}` : '—')}</span>
-                  <span className="text-xs leading-5">{o.customerInfo?.address}</span>
+                  <span className="text-xs">{o.payment ? payLabel(o) : (o.paymentInfo ? `待繳：${o.paymentInfo.paymentType}` : '—')}</span>
+                  <span className="text-xs leading-5">{o.customerInfo?.address}{o.logistics?.cvsPaymentNo && <span className="block font-bold text-[#A8325F]">寄貨編號 {o.logistics.cvsPaymentNo}{o.logistics.cvsValidationNo && ` ・ 驗證碼 ${o.logistics.cvsValidationNo}`}</span>}{o.logistics?.lastStatus && <span className="block muted">{o.logistics.lastStatus.message}</span>}</span>
                   <span><StatusBadge status={o.status} /></span>
                 </div>
               ))}
@@ -968,6 +1041,7 @@
             </div>
           </div>
           {open && <OrderDetail order={open} onClose={() => setOpenId(null)} notify={notify} />}
+          {settingsOpen && <ShippingSettings onClose={() => setSettingsOpen(false)} notify={notify} />}
         </div>
       );
     }
@@ -989,7 +1063,7 @@
       const knownCost = lines.map(costOf).filter(v => v !== null);
       const cogs = knownCost.reduce((a, b) => a + b, 0);
       const costCoverage = lines.length ? Math.round(knownCost.length / lines.length * 100) : 0;
-      const byType = active.reduce((m, o) => { const k = (o.payment?.paymentType || '其他').split('_')[0]; m[k] = (m[k] || 0) + orderAmount(o); return m; }, {});
+      const byType = active.reduce((m, o) => { const k = isCod(o) ? '取貨付款' : (o.payment?.paymentType || '其他').split('_')[0]; m[k] = (m[k] || 0) + orderAmount(o); return m; }, {});
       const refunds = paid.filter(o => o.status === 'cancelled');
 
       const salesBy = (keyFn) => {
