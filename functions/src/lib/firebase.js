@@ -29,8 +29,10 @@ const inventoryRef = () => shopRoot().collection('inventory');
 const ordersRef = () => shopRoot().collection('orders');
 // 每一次庫存異動（進貨、售出、盤點調整、退貨）的紀錄
 const stockMovementsRef = () => shopRoot().collection('stockMovements');
+// 後台「出貨設定」（寄件人姓名、手機），店家在後台直接修改
+const shippingSettingsRef = () => shopRoot().collection('settings').doc('shipping');
 // 顧客「我的訂單」看的副本
 const customerOrderRef = (uid, orderId) =>
   db.collection('artifacts').doc(APP_ID).collection('users').doc(uid).collection('orders').doc(orderId);
 
-module.exports = { FieldValue, verifyIdToken, db, APP_ID, ADMIN_USER_ID, inventoryRef, ordersRef, stockMovementsRef, customerOrderRef };
+module.exports = { FieldValue, verifyIdToken, db, APP_ID, ADMIN_USER_ID, inventoryRef, ordersRef, stockMovementsRef, shippingSettingsRef, customerOrderRef };

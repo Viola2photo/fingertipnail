@@ -16,6 +16,7 @@ const fakeFirebase = {
   inventoryRef: () => root.collection('inventory'),
   ordersRef: () => root.collection('orders'),
   stockMovementsRef: () => root.collection('stockMovements'),
+  shippingSettingsRef: () => root.collection('settings').doc('shipping'),
   customerOrderRef: (uid, id) => db.collection('artifacts').doc('nail-inventory-app').collection('users').doc(uid).collection('orders').doc(id),
 };
 require.cache[path.resolve(__dirname, '../src/lib/firebase.js')] = { id: 'fake', filename: 'fake', loaded: true, exports: fakeFirebase };
@@ -40,6 +41,7 @@ const formValue = (body, name) => body && body.fields ? body.fields[name] : unde
 
 test.before(async () => {
   await fakeFirebase.inventoryRef().doc('NAIL_0001').set({ id: 'NAIL_0001', name: '焦糖緞帶', price: 490, stock: { XS: 0, S: 2, M: 1, L: 0 } });
+  await fakeFirebase.inventoryRef().doc('NAIL_0003').set({ id: 'NAIL_0003', name: '取貨付款測試款', price: 390, stock: { M: 3 } });
   await fakeFirebase.inventoryRef().doc('NAIL_0002').set({ id: 'NAIL_0002', name: '下架款', price: 390, status: 'N', stock: { S: 5 } });
 });
 
@@ -219,4 +221,89 @@ test('只填地址（宅配）無法結帳，必須選擇超商門市', async ()
   await checkout(req({ items: [{ id: 'NAIL_0001', size: 'S', quantity: 1 }], name: '王小美', phone: '0912345678', address: '台北市信義區' }), res);
   assert.equal(res.statusCode, 400);
   assert.match(res.body.error, /取貨門市/);
+});
+
+// ---- 收件人姓名、取貨付款、物流單 ----
+const adminLogistics = require('../src/handlers/adminLogistics');
+const logisticsNotify = require('../src/handlers/logisticsNotify');
+const LOGI = ecpay.logisticsConfig();
+const admin = { authorization: 'Bearer admin-token' };
+
+test('收件人姓名需符合超商規定（中文 2～5 字或英文 4～10 字母）', async () => {
+  const bad = mockRes();
+  await checkout(req({ items: [{ id: 'NAIL_0003', size: 'M', quantity: 1 }], name: '張', phone: '0912345678', store: STORE }), bad);
+  assert.strictEqual(bad.statusCode, 400);
+  assert.match(bad.body.error, /中文 2～5 字/);
+  assert.strictEqual(ecpay.logisticsName('Viola Chang'), 'ViolaChang');
+  assert.strictEqual(ecpay.logisticsName('Viola Chang 2'), '');
+  assert.strictEqual(ecpay.logisticsName('歐陽娜娜美子'), '');
+});
+
+let codNo;
+test('超商取貨付款：不經綠界付款頁，訂單直接成立並扣庫存，但還不算收款', async () => {
+  const res = mockRes();
+  await checkout(req({ items: [{ id: 'NAIL_0003', size: 'M', quantity: 1 }], name: 'Viola Chang', phone: '0912345678', store: STORE, paymentMethod: 'cod' }), res);
+  assert.strictEqual(res.statusCode, 200, JSON.stringify(res.body));
+  assert.strictEqual(res.body.cod, true);
+  assert.strictEqual(res.body.action, undefined);
+  codNo = res.body.orderNo;
+  const order = (await fakeFirebase.ordersRef().doc(codNo).get()).data();
+  assert.strictEqual(order.status, 'paid');
+  assert.strictEqual(order.payment.paymentType, 'COD');
+  assert.strictEqual(order.paidAt, undefined);
+  assert.strictEqual((await fakeFirebase.inventoryRef().doc('NAIL_0003').get()).data().stock.M, 2);
+});
+
+test('建立物流單：沒填寄件人會提示到出貨設定；取貨付款帶代收金額', async () => {
+  const noSender = mockRes();
+  await adminLogistics(req({ action: 'create', orderId: codNo }, admin), noSender);
+  assert.strictEqual(noSender.statusCode, 400);
+  assert.match(noSender.body.error, /出貨設定/);
+
+  await fakeFirebase.shippingSettingsRef().set({ senderName: '張力予', senderPhone: '0911222333' });
+  const realFetch = global.fetch;
+  let sent;
+  global.fetch = async (url, opts) => { sent = Object.fromEntries(new URLSearchParams(opts.body)); return { ok: true, text: async () => '1|AllPayLogisticsID=LG123&CVSPaymentNo=C987&CVSValidationNo=V1' }; };
+  try {
+    const res = mockRes();
+    await adminLogistics(req({ action: 'create', orderId: codNo }, admin), res);
+    assert.strictEqual(res.statusCode, 200, JSON.stringify(res.body));
+  } finally { global.fetch = realFetch; }
+  assert.strictEqual(sent.IsCollection, 'Y');
+  assert.strictEqual(sent.GoodsAmount, '450');
+  assert.strictEqual(sent.CollectionAmount, '450');
+  assert.strictEqual(sent.ReceiverName, 'ViolaChang');
+  assert.strictEqual(sent.SenderName, '張力予');
+  assert.ok(ecpay.verifyCheckMacValue(sent, LOGI.hashKey, LOGI.hashIv, 'md5'));
+  const order = (await fakeFirebase.ordersRef().doc(codNo).get()).data();
+  assert.strictEqual(order.status, 'shipping');
+  assert.strictEqual(order.logistics.cvsPaymentNo, 'C987');
+});
+
+test('物流通知：顧客已取貨（2067）→ 訂單完成，取貨付款記為已收款', async () => {
+  const body = { MerchantID: LOGI.merchantId, AllPayLogisticsID: 'LG123', RtnCode: '2067', RtnMsg: '買家已到店取貨' };
+  body.CheckMacValue = ecpay.generateCheckMacValue(body, LOGI.hashKey, LOGI.hashIv, 'md5');
+  const res = mockRes();
+  await logisticsNotify(req(body), res);
+  assert.strictEqual(res.body, '1|OK');
+  const order = (await fakeFirebase.ordersRef().doc(codNo).get()).data();
+  assert.strictEqual(order.status, 'completed');
+  assert.strictEqual(order.payment.collected, true);
+  assert.ok(order.paidAt);
+});
+
+test('後台可修改不合規的收件人姓名；建立物流單後就不能改', async () => {
+  const res = mockRes();
+  await checkout(req({ items: [{ id: 'NAIL_0003', size: 'M', quantity: 1 }], name: '王小美', phone: '0912345678', store: STORE, paymentMethod: 'cod' }), res);
+  const no = res.body.orderNo;
+  const bad = mockRes();
+  await adminOrder(req({ action: 'receiver', orderId: no, name: 'A' }, admin), bad);
+  assert.strictEqual(bad.statusCode, 400);
+  const ok = mockRes();
+  await adminOrder(req({ action: 'receiver', orderId: no, name: '王美美' }, admin), ok);
+  assert.deepStrictEqual(ok.body, { ok: true });
+  assert.strictEqual((await fakeFirebase.ordersRef().doc(no).get()).data().customerInfo.name, '王美美');
+  const locked = mockRes();
+  await adminOrder(req({ action: 'receiver', orderId: codNo, name: '王美美' }, admin), locked);
+  assert.match(locked.body.error, /已建立物流單/);
 });

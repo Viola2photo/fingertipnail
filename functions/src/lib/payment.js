@@ -4,6 +4,8 @@ const { db, inventoryRef, ordersRef, stockMovementsRef } = require('./firebase')
 const { PAID_STATUSES, historyEntry, applyOrderUpdate } = require('./orders');
 
 // payment: { tradeNo, paymentType, paymentDate, tradeAmt, fee, simulated }
+// 取貨付款（paymentType 'COD'）也走這裡：下單即成立並扣庫存，但還沒收到錢，所以不記 paidAt、不開發票，
+// 等物流通知顧客取貨後才補上（見 logisticsNotify）。
 // 回傳 'paid' | 'already' | 'mismatch' | 'simulated' | 'missing'
 async function markOrderPaid(merchantTradeNo, payment, source) {
   let outcome = 'missing';
@@ -49,10 +51,12 @@ async function markOrderPaid(merchantTradeNo, payment, source) {
     }
     Object.entries(stocks).forEach(([id, stock]) => { if (stock) tx.update(inventoryRef().doc(id), { stock }); });
 
-    const patch = { status: 'paid', paidAt: now, payment, oversold };
+    const cod = payment.paymentType === 'COD';
+    const patch = cod ? { status: 'paid', payment, oversold } : { status: 'paid', paidAt: now, payment, oversold };
     // 發票不在付款通知內開立（SKILL：ReturnURL 需 10 秒內回應，耗時工作改非同步），交給排程處理
-    if (ecpay.invoiceEnabled()) patch.invoiceStatus = 'pending';
-    const note = `付款成功（${payment.paymentType}）${source ? `［${source}］` : ''}` + (oversold.length ? `；⚠ 庫存不足：${oversold.join('、')}` : '');
+    if (ecpay.invoiceEnabled() && !cod) patch.invoiceStatus = 'pending';
+    const note = (cod ? '取貨付款訂單成立，顧客取貨時付款' : `付款成功（${payment.paymentType}）`) +
+      (source ? `［${source}］` : '') + (oversold.length ? `；⚠ 庫存不足：${oversold.join('、')}` : '');
     applyOrderUpdate(tx, order, patch, historyEntry('paid', note));
     outcome = 'paid';
   });
