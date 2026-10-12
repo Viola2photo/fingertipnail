@@ -1,6 +1,7 @@
 // 指尖造藝 前台（Preact + htm，免編譯）
 import { html, render, useState, useEffect, useMemo, useRef, useCallback } from '../vendor/preact-htm.module.js';
 import { SITE, SIZES, SHAPE_GROUPS, MOODS, PRICE_TIERS, ORDER_STATUS } from './config.js';
+import { PAGES } from './pages.js';
 import { auth, watchUser, login, logout, watchProducts, watchMyOrders } from './firebase.js';
 
 // ---------- 工具 ----------
@@ -23,6 +24,8 @@ function parseRoute() {
   if (m) return { name: 'product', id: m[1] };
   if (hash.startsWith('/checkout')) return { name: 'checkout' };
   if (hash.startsWith('/orders')) return { name: 'orders' };
+  if (hash.startsWith('/about')) return { name: 'page', id: 'about' };
+  if (hash.startsWith('/returns')) return { name: 'page', id: 'returns' };
   return { name: 'home' };
 }
 const go = (path) => { location.hash = path; window.scrollTo(0, 0); };
@@ -111,9 +114,30 @@ function Footer() {
         </div>
         <div style="flex:1 1 200px"><strong>付款方式</strong>綠界 ECPay：信用卡、ATM 轉帳、超商代碼；超商取貨付款</div>
         <div style="flex:1 1 200px"><strong>配送方式</strong>7-ELEVEN／全家 超商取貨<br />滿 ${money(SITE.freeShippingThreshold)} 免運，未滿運費 ${money(SITE.shippingFee)}</div>
-        <div style="flex:1 1 200px"><strong>聯絡我們</strong><a href=${`mailto:${SITE.contactEmail}`}>${SITE.contactEmail}</a></div>
+        <div style="flex:1 1 200px"><strong>聯絡我們</strong><a href=${`mailto:${SITE.contactEmail}`}>${SITE.contactEmail}</a>
+          <div class="footer-links"><a href="#/about">關於我們</a><a href="#/returns">退換貨政策</a></div></div>
       </div>
     </footer>`;
+}
+
+// ---------- 文字頁面（內容在 pages.js） ----------
+function InfoPage({ id }) {
+  const page = PAGES[id];
+  useEffect(() => window.scrollTo(0, 0), [id]);
+  const item = (it) => (Array.isArray(it) ? html`<li><strong>${it[0]}：</strong>${it[1]}</li>` : html`<li>${it}</li>`);
+  return html`
+    <section class="container section info-page">
+      <div class="section-head"><div><div class="script">${page.script}</div><h2>${page.title}</h2></div></div>
+      ${page.intro.map((t) => html`<p>${t}</p>`)}
+      ${page.sections.map((sec) => html`
+        <div class="info-block">
+          ${sec.title && html`<h3>${sec.title}</h3>`}
+          ${sec.subtitle && html`<h4>【${sec.subtitle}】</h4>`}
+          ${(sec.paras || []).map((t) => html`<p>${t}</p>`)}
+          ${sec.items && html`<ul>${sec.items.map(item)}</ul>`}
+        </div>`)}
+      ${id === 'returns' && html`<p class="info-contact">申請退換貨請來信 <a href=${`mailto:${SITE.contactEmail}`}>${SITE.contactEmail}</a>，並附上訂單編號。</p>`}
+    </section>`;
 }
 
 // ---------- 首頁 ----------
@@ -506,6 +530,7 @@ function Checkout({ cart, user, quote, promo }) {
         <${Summary} cart=${cart} quote=${quote} />
         ${error && html`<div class="notice notice-pink" role="alert" style="margin-top:12px">${error}</div>`}
         <button class="btn btn-primary" type="submit" style="width:100%;margin-top:16px" disabled=${busy || !!quote.error || quote.loading}>${payment === 'cod' ? (busy ? '送出訂單中…' : '送出訂單（取貨付款）') : (busy ? '前往綠界付款…' : '前往綠界付款')}</button>
+        <p class="muted" style="font-size:12px;text-align:center;margin:8px 0 0">送出訂單即表示你同意本店的<a href="#/returns" target="_blank">退換貨政策</a></p>
         <p class="muted" style="font-size:12px;margin:10px 0 0">${payment === 'cod' ? '包裹到店後會有簡訊通知，請在期限內到門市付款取貨。' : '付款由綠界科技 ECPay 處理，本站不儲存信用卡資料。'}${!user ? ' 登入後下單可在「我的訂單」查看進度。' : ''}</p>
       </aside>
     </form>`;
@@ -612,6 +637,7 @@ function App() {
       ${route.name === 'product' && html`<${ProductPage} id=${route.id} products=${products} loading=${loading} addToCart=${addToCart} />`}
       ${route.name === 'checkout' && html`<${Checkout} cart=${liveCart} user=${user} quote=${quote} promo=${promo} />`}
       ${route.name === 'orders' && html`<${Orders} user=${user} banner=${banner} />`}
+      ${route.name === 'page' && html`<${InfoPage} id=${route.id} />`}
     </main>
     <${Footer} />
     ${cartOpen && html`<${CartDrawer} cart=${liveCart} setCart=${setCart} onClose=${() => setCartOpen(false)} promo=${promo} setPromo=${setPromo} quote=${quote} />`}`;

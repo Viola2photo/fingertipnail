@@ -218,3 +218,14 @@ button { cursor: pointer; }
   .size-guide { padding: 28px 20px; border-radius: 28px; }
   .checkout-side { position: static; }
 }
+
+/* 文字頁面：關於我們、退換貨政策 */
+.info-page { max-width: 760px; line-height: 1.9; }
+.info-page p { margin: 0 0 12px; }
+.info-block { margin-top: 28px; }
+.info-block h3 { font-family: var(--serif); font-size: 20px; letter-spacing: .04em; margin: 0 0 10px; }
+.info-block h4 { font-size: 15px; margin: 18px 0 6px; color: var(--accent-dark); }
+.info-block ul { margin: 0; padding-left: 1.2em; }
+.info-block li { margin-bottom: 8px; }
+.info-contact { margin-top: 32px !important; padding: 14px 18px; background: var(--pink); border-radius: 18px; }
+.footer-links { display: flex; gap: 14px; margin-top: 10px; }

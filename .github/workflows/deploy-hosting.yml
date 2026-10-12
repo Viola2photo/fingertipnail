@@ -1,0 +1,26 @@
+# 合併到 main 後自動更新網站畫面（只更新 Hosting：頁面、文字、圖片、樣式）。
+# 後端 functions 有改動時，仍需在電腦上執行：
+#   firebase deploy --only hosting,functions:api,functions:maintenance
+# 需要的 GitHub Secret：FIREBASE_SERVICE_ACCOUNT_NAILPROJECT_40022
+# （在電腦上的專案資料夾執行一次 `firebase init hosting:github` 會自動建立）
+name: 自動更新網站
+
+on:
+  push:
+    branches: [main]
+    paths: ['public/**', 'firebase.json', '.github/workflows/deploy-hosting.yml']
+  workflow_dispatch:
+
+concurrency: deploy-hosting
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_NAILPROJECT_40022 }}
+          channelId: live
+          projectId: nailproject-40022
