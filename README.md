@@ -70,7 +70,7 @@ firebase deploy
 ```bash
 firebase functions:secrets:set ECPAY_HASH_KEY      # 依提示貼上，不會顯示在畫面上
 firebase functions:secrets:set ECPAY_HASH_IV
-firebase deploy --only functions                   # 重新部署後生效
+firebase deploy --only hosting,functions:api,functions:maintenance   # 重新部署後生效（不要只打 --only functions，會詢問刪除同專案的舊函式）
 ```
 
 一般參數存在 `functions/.env.nailproject-40022`（已列入 .gitignore，不會上傳）：
@@ -107,6 +107,14 @@ SENDER_CELLPHONE=09xxxxxxxx
 8. **規格版本**：開發時無法連到綠界開發者網站，參數依 SKILL 內附的 2026-03／04 規格快照。**正式上線前請到 developers.ecpay.com.tw 核對**付款（AioCheckOut）、物流（Express/Create）、發票（B2CInvoice/Issue）的最新欄位。
 
 **目前未實作（需要時再加）**：公司統編發票、發票作廢／折讓（請在綠界後台操作）、宅配（前台已關閉，只開放超商取貨）、取貨付款未取退回的自動退庫存（請在「需處理」分頁手動取消並退回庫存）、結帳頁的發票載具／捐贈選項（已隱藏；開啟電子發票時一律開雲端發票）、信用卡退刷 API（請在綠界後台操作）。
+
+## 自動更新網站
+
+`public/` 裡的頁面、文字、圖片、樣式合併到 main 後，GitHub Actions（`.github/workflows/deploy-hosting.yml`）會自動更新網站，不用再下載 ZIP。
+第一次要在電腦的專案資料夾執行 `firebase init hosting:github`，讓它在 GitHub 建立金鑰 `FIREBASE_SERVICE_ACCOUNT_NAILPROJECT_40022`（產生的 workflow 檔不用上傳）。
+`functions/` 有改動或改了部署參數（例如 `SITE_URL`）時，在電腦上執行 `firebase deploy --only functions:api,functions:maintenance`。設定好自動更新後不要再從電腦部署 hosting，否則電腦上較舊的頁面會蓋掉網站。
+
+文字頁面（關於我們、退換貨政策）的內容在 `public/js/pages.js`。
 
 ## 上線檢查
 
