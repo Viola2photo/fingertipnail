@@ -112,7 +112,7 @@ SENDER_CELLPHONE=09xxxxxxxx
 
 `public/` 裡的頁面、文字、圖片、樣式合併到 main 後，GitHub Actions（`.github/workflows/deploy-hosting.yml`）會自動更新網站，不用再下載 ZIP。
 第一次要在電腦的專案資料夾執行 `firebase init hosting:github`，讓它在 GitHub 建立金鑰 `FIREBASE_SERVICE_ACCOUNT_NAILPROJECT_40022`（產生的 workflow 檔不用上傳）。
-`functions/` 有改動時仍要在電腦上執行 `firebase deploy --only hosting,functions:api,functions:maintenance`。
+`functions/` 有改動或改了部署參數（例如 `SITE_URL`）時，在電腦上執行 `firebase deploy --only functions:api,functions:maintenance`。設定好自動更新後不要再從電腦部署 hosting，否則電腦上較舊的頁面會蓋掉網站。
 
 文字頁面（關於我們、退換貨政策）的內容在 `public/js/pages.js`。
 
