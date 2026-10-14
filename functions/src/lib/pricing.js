@@ -4,6 +4,9 @@ const SHIPPING_FEE = 60;
 const FREE_SHIPPING_THRESHOLD = 1000;
 const BUNDLE_SIZE = 4;
 const BUNDLE_PRICE = 1000;
+// 名稱含這個字的加購品（果凍膠）不算進「任 4 件」，與前台 config.js 的 SITE.glueKeyword 相同
+const ADDON_KEYWORD = '果凍膠';
+const isAddon = (line) => String(line.name || '').includes(ADDON_KEYWORD);
 
 const PROMO_CODES = {
   VIP9: { type: 'percent', value: 0.9, name: 'VIP 專屬 9 折' },
@@ -11,12 +14,12 @@ const PROMO_CODES = {
   NEWOPEN: { type: 'percent', value: 0.85, name: '歡慶開幕 85 折' },
 };
 
-// lines: [{ price, quantity }]
+// lines: [{ price, quantity, name? }]
 function calculateTotals(lines, promoCode) {
   const subtotal = lines.reduce((sum, l) => sum + l.price * l.quantity, 0);
 
   const unitPrices = [];
-  lines.forEach((l) => { for (let i = 0; i < l.quantity; i++) unitPrices.push(l.price); });
+  lines.filter((l) => !isAddon(l)).forEach((l) => { for (let i = 0; i < l.quantity; i++) unitPrices.push(l.price); });
   unitPrices.sort((a, b) => b - a);
 
   // 任 4 件 1000：拿最貴的件數組成組合
@@ -43,4 +46,4 @@ function calculateTotals(lines, promoCode) {
   return { subtotal, eventDiscount, promo, promoDiscount, shippingFee, total };
 }
 
-module.exports = { SHIPPING_FEE, FREE_SHIPPING_THRESHOLD, PROMO_CODES, calculateTotals };
+module.exports = { ADDON_KEYWORD, SHIPPING_FEE, FREE_SHIPPING_THRESHOLD, PROMO_CODES, calculateTotals };

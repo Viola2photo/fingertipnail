@@ -292,6 +292,7 @@ function GlueOffer({ glue, cart, addToCart }) {
         <strong>💎 ${GLUE_PAGE.offerTitle}</strong>
         <span>${GLUE_PAGE.offerText}</span>
         <a href="#/glue">了解果凍膠 →</a>
+        <small class="muted">${GLUE_PAGE.bundleNote}</small>
       </div>
       <div class="glue-offer-buy">
         <span class="price">${money(glue.price)}</span>
@@ -332,6 +333,7 @@ function GluePage({ glue, cart, addToCart }) {
         ${g.reasons.map(([t, d]) => html`<div class="glue-reason"><strong>${t}</strong><p>${d}</p></div>`)}
       </div>
       <p class="glue-tip">💡 ${g.tip}</p>
+      <p class="muted" style="text-align:center;font-size:13px;margin:8px 0 0">${g.bundleNote}</p>
       <div style="text-align:center;margin-top:24px"><a class="btn btn-ghost" href="#/" onClick=${(e) => { e.preventDefault(); scrollToId('shop'); }}>去挑選穿戴甲</a></div>
     </section>`;
 }
