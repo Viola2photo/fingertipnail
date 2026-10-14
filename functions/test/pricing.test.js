@@ -33,3 +33,12 @@ test('無效優惠碼不折抵', () => {
   assert.strictEqual(t.promo, null);
   assert.strictEqual(t.promoDiscount, 0);
 });
+
+test('果凍膠不算進任 4 件', () => {
+  const t = calculateTotals([{ price: 300, quantity: 3, name: '甜妹' }, { price: 60, quantity: 1, name: '瞬黏環保果凍膠' }]);
+  assert.strictEqual(t.eventDiscount, 0);
+  assert.strictEqual(t.total, 960 + 60);
+  const t2 = calculateTotals([{ price: 300, quantity: 4, name: '甜妹' }, { price: 60, quantity: 2, name: '果凍膠' }]);
+  assert.strictEqual(t2.eventDiscount, 200);
+  assert.strictEqual(t2.total, 1000 + 120);
+});

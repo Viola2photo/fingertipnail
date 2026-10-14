@@ -8,8 +8,9 @@ export const SITE = {
   announcement: '穿戴甲 NT$300 起 ・ 滿 NT$1,000 免運 ・ 任選 4 件 NT$1,000',
   freeShippingThreshold: 1000,
   shippingFee: 60,
-  // 尺寸對照：填入數字後會顯示在首頁；維持 null 則顯示「歡迎私訊詢問」
-  sizeGuide: null, // 例：{ XS: '12', S: '13', M: '14', L: '15' }（大拇指甲寬度 mm）
+  // 果凍膠：建檔系統裡商品名稱含這個字的商品，會當成加購用的果凍膠（不顯示在款式清單）
+  glueKeyword: '果凍膠',
+  // 尺寸對照表在 pages.js 的 GUIDE_PAGE.table
 };
 
 // Firebase 網頁設定（這組是公開的網頁識別碼，不是密碼；請在 Google Cloud 限制只允許你的網域使用）
