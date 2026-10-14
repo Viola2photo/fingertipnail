@@ -1,7 +1,7 @@
 // 指尖造藝 前台（Preact + htm，免編譯）
 import { html, render, useState, useEffect, useMemo, useRef, useCallback } from '../vendor/preact-htm.module.js';
 import { SITE, SIZES, SHAPE_GROUPS, MOODS, PRICE_TIERS, ORDER_STATUS } from './config.js';
-import { PAGES, GLUE_PAGE } from './pages.js';
+import { PAGES, GLUE_PAGE, GUIDE_PAGE } from './pages.js';
 import { auth, watchUser, login, logout, watchProducts, watchMyOrders } from './firebase.js';
 
 // ---------- 工具 ----------
@@ -28,6 +28,7 @@ function parseRoute() {
   if (hash.startsWith('/checkout')) return { name: 'checkout' };
   if (hash.startsWith('/orders')) return { name: 'orders' };
   if (hash.startsWith('/glue')) return { name: 'glue' };
+  if (hash.startsWith('/guide')) return { name: 'guide' };
   if (hash.startsWith('/about')) return { name: 'page', id: 'about' };
   if (hash.startsWith('/returns')) return { name: 'page', id: 'returns' };
   return { name: 'home' };
@@ -91,7 +92,7 @@ function Header({ cartCount, onCart, user, query, setQuery }) {
           <a href="#/glue" class="nav-glue">果凍膠</a>
           <a href="#/" onClick=${(e) => { e.preventDefault(); scrollToId('shapes'); }}>依甲型挑選</a>
           <a href="#/" onClick=${(e) => { e.preventDefault(); scrollToId('moods'); }}>依風格挑選</a>
-          <a href="#/" onClick=${(e) => { e.preventDefault(); scrollToId('size'); }}>尺寸指南</a>
+          <a href="#/guide">尺寸與工藝</a>
           <a href="#/orders">我的訂單</a>
         </nav>
         <div class="header-tools">
@@ -253,10 +254,11 @@ function Home({ products, loading, query, filter, setFilter }) {
       <div class="size-guide">
         <div>
           <h2>不知道自己的尺寸？</h2>
-          <p style="margin:0;color:#4A3050">用膠帶量大拇指甲最寬處，對照右邊的尺寸。介於兩個尺寸之間，建議選小一號更服貼。</p>
+          <p style="margin:0;color:#4A3050">用軟尺或紙條量大拇指甲最寬處，對照右邊的尺寸。其他手指的尺寸與測量方法請看完整尺寸表。</p>
+          <a href="#/guide" style="display:inline-block;margin-top:8px">完整尺寸表與測量方式 →</a>
         </div>
         <div class="size-cells">
-          ${SIZES.map((s) => html`<div class="size-cell"><strong>${s}</strong><span class="muted" style="font-size:13px">${SITE.sizeGuide?.[s] ? `拇指 ${SITE.sizeGuide[s]} mm` : '歡迎私訊詢問'}</span></div>`)}
+          ${SIZES.map((s) => html`<div class="size-cell"><strong>${s}</strong><span class="muted" style="font-size:13px">${GUIDE_PAGE.table[s] ? `拇指 ${GUIDE_PAGE.table[s][0]} mm` : '歡迎私訊詢問'}</span></div>`)}
         </div>
       </div>
     </section>`;
@@ -334,6 +336,38 @@ function GluePage({ glue, cart, addToCart }) {
     </section>`;
 }
 
+function GuidePage() {
+  const g = GUIDE_PAGE;
+  useEffect(() => window.scrollTo(0, 0), []);
+  return html`
+    <section class="container section guide-page">
+      <div class="section-head"><div><div class="script">${g.script}</div><h2>${g.title}</h2></div></div>
+      <p>${g.intro}</p>
+
+      <h3 class="guide-title">${g.measureTitle}</h3>
+      <div class="guide-methods">
+        ${g.methods.map(([t, d]) => html`<div class="guide-method"><strong>${t}</strong><span>${d}</span></div>`)}
+      </div>
+
+      <h3 class="guide-title">${g.tableTitle}</h3>
+      <div class="guide-table-wrap">
+        <table class="guide-table">
+          <thead><tr><th>尺寸</th>${g.fingers.map((f) => html`<th>${f}</th>`)}</tr></thead>
+          <tbody>
+            ${SIZES.map((s) => html`<tr><th>${s}${g.sizeNotes[s] && html`<small>${g.sizeNotes[s]}</small>`}</th>${(g.table[s] || []).map((n) => html`<td>${n}</td>`)}</tr>`)}
+          </tbody>
+        </table>
+      </div>
+      <div class="notice notice-pink" style="margin-top:14px">⚠️ <strong>重要提醒：</strong>${g.warning}</div>
+
+      <h3 class="guide-title">${g.stepsTitle}</h3>
+      <ol class="guide-steps">
+        ${g.steps.map(([t, d], i) => html`<li><span class="guide-num">${i + 1}</span><div><strong>${t}</strong><span>${d}</span></div></li>`)}
+      </ol>
+      <div style="text-align:center;margin-top:28px"><a class="btn btn-primary" href="#/" onClick=${(e) => { e.preventDefault(); scrollToId('shop'); }}>量好了，去挑款式</a></div>
+    </section>`;
+}
+
 // ---------- 商品頁 ----------
 function ProductPage({ id, products, loading, addToCart, glue, cart }) {
   const p = products.find((x) => x.docId === id);
@@ -387,7 +421,7 @@ function ProductPage({ id, products, loading, addToCart, glue, cart }) {
           <div>
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
               <strong>選擇尺寸</strong>
-              <button class="link-btn" onClick=${() => scrollToId('size')}>尺寸怎麼量？</button>
+              <button class="link-btn" onClick=${() => go('/guide')}>尺寸怎麼量？</button>
             </div>
             <div class="sizes" role="group" aria-label="尺寸">
               ${SIZES.map((s) => {
@@ -702,6 +736,7 @@ function App() {
       ${route.name === 'home' && html`<${Home} products=${products} loading=${loading} query=${query} filter=${filter} setFilter=${setFilter} />`}
       ${route.name === 'product' && html`<${ProductPage} id=${route.id} products=${products} loading=${loading} addToCart=${addToCart} glue=${glue} cart=${liveCart} />`}
       ${route.name === 'checkout' && html`<${Checkout} cart=${liveCart} user=${user} quote=${quote} promo=${promo} glue=${glue} addToCart=${addToCart} />`}
+      ${route.name === 'guide' && html`<${GuidePage} />`}
       ${route.name === 'glue' && html`<${GluePage} glue=${glue} cart=${liveCart} addToCart=${addToCart} />`}
       ${route.name === 'orders' && html`<${Orders} user=${user} banner=${banner} />`}
       ${route.name === 'page' && html`<${InfoPage} id=${route.id} />`}
