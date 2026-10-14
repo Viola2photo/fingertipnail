@@ -229,3 +229,30 @@ button { cursor: pointer; }
 .info-block li { margin-bottom: 8px; }
 .info-contact { margin-top: 32px !important; padding: 14px 18px; background: var(--pink); border-radius: 18px; }
 .footer-links { display: flex; gap: 14px; margin-top: 10px; }
+
+/* 果凍膠：介紹頁與加購提醒 */
+.nav .nav-glue { color: var(--accent); font-weight: 700; }
+.glue-offer { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; padding: 14px 16px; background: #FFF7FA; border: 1.5px dashed #E7A6C2; border-radius: 18px; }
+.glue-offer-text { flex: 1 1 220px; display: flex; flex-direction: column; gap: 4px; font-size: 14px; color: #4A3050; }
+.glue-offer-text strong { color: var(--accent-dark); font-size: 15px; }
+.glue-offer-text a { font-size: 13px; }
+.glue-offer-buy { display: flex; align-items: center; gap: 12px; }
+.glue-offer-buy .btn { min-height: 40px; padding: 0 18px; font-size: 14px; }
+.glue-added { color: var(--mint-ink); font-weight: 700; font-size: 14px; }
+.glue-page { max-width: 860px; }
+.glue-hero { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.glue-hero h1 { margin: 0; font-size: clamp(26px, 4vw, 38px); letter-spacing: .04em; color: var(--accent-dark); }
+.glue-hero p { margin: 0; max-width: 560px; line-height: 1.9; }
+.glue-sub { color: var(--accent); font-size: 15px; }
+.glue-buy { display: flex; align-items: center; gap: 16px; margin-top: 8px; }
+.glue-features { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-top: 32px; }
+.glue-feature { background: #fff; border: 1px solid var(--line-2); border-radius: 18px; padding: 18px 14px; text-align: center; display: flex; flex-direction: column; gap: 4px; }
+.glue-feature strong { color: var(--accent-dark); }
+.glue-feature span { font-size: 13px; color: var(--muted); line-height: 1.7; }
+.glue-icon { font-size: 30px; }
+.glue-reasons { margin-top: 28px; background: #FFF7FA; border: 1.5px dashed #E7A6C2; border-radius: 22px; padding: 22px 24px; }
+.glue-reasons h2 { margin: 0 0 12px; font-family: var(--serif); font-size: 20px; color: var(--accent-dark); }
+.glue-reason { margin-top: 14px; }
+.glue-reason strong { color: var(--accent-dark); }
+.glue-reason p { margin: 4px 0 0; font-size: 15px; line-height: 1.9; }
+.glue-tip { margin: 20px 0 0; text-align: center; color: var(--accent); font-size: 14px; }

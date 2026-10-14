@@ -9,6 +9,8 @@ export const SITE = {
   freeShippingThreshold: 1000,
   shippingFee: 60,
   // 尺寸對照：填入數字後會顯示在首頁；維持 null 則顯示「歡迎私訊詢問」
+  // 果凍膠：建檔系統裡商品名稱含這個字的商品，會當成加購用的果凍膠（不顯示在款式清單）
+  glueKeyword: '果凍膠',
   sizeGuide: null, // 例：{ XS: '12', S: '13', M: '14', L: '15' }（大拇指甲寬度 mm）
 };
 

@@ -1,7 +1,7 @@
 // 指尖造藝 前台（Preact + htm，免編譯）
 import { html, render, useState, useEffect, useMemo, useRef, useCallback } from '../vendor/preact-htm.module.js';
 import { SITE, SIZES, SHAPE_GROUPS, MOODS, PRICE_TIERS, ORDER_STATUS } from './config.js';
-import { PAGES } from './pages.js';
+import { PAGES, GLUE_PAGE } from './pages.js';
 import { auth, watchUser, login, logout, watchProducts, watchMyOrders } from './firebase.js';
 
 // ---------- 工具 ----------
@@ -16,6 +16,9 @@ const validPickupName = (name) => {
   const n = Array.from(s).length;
   return (/^\p{Script=Han}+$/u.test(s) && n >= 2 && n <= 5) || (/^[A-Za-z]+$/.test(s) && n >= 4 && n <= 10);
 };
+// 果凍膠是加購品，用名稱辨認（關鍵字在 config.js 的 SITE.glueKeyword）
+const isGlue = (p) => Boolean(SITE.glueKeyword) && String(p?.name || '').includes(SITE.glueKeyword);
+const glueSize = (p) => SIZES.find((s) => Number(p?.stock?.[s] || 0) > 0) || '';
 const isInAppBrowser = () => /Line\/|FBAN|FBAV|Instagram/i.test(navigator.userAgent);
 
 function parseRoute() {
@@ -24,6 +27,7 @@ function parseRoute() {
   if (m) return { name: 'product', id: m[1] };
   if (hash.startsWith('/checkout')) return { name: 'checkout' };
   if (hash.startsWith('/orders')) return { name: 'orders' };
+  if (hash.startsWith('/glue')) return { name: 'glue' };
   if (hash.startsWith('/about')) return { name: 'page', id: 'about' };
   if (hash.startsWith('/returns')) return { name: 'page', id: 'returns' };
   return { name: 'home' };
@@ -84,6 +88,7 @@ function Header({ cartCount, onCart, user, query, setQuery }) {
         </a>
         <nav class="nav" aria-label="主選單">
           <a href="#/" onClick=${(e) => { e.preventDefault(); scrollToId('shop'); }}>新品上架</a>
+          <a href="#/glue" class="nav-glue">果凍膠</a>
           <a href="#/" onClick=${(e) => { e.preventDefault(); scrollToId('shapes'); }}>依甲型挑選</a>
           <a href="#/" onClick=${(e) => { e.preventDefault(); scrollToId('moods'); }}>依風格挑選</a>
           <a href="#/" onClick=${(e) => { e.preventDefault(); scrollToId('size'); }}>尺寸指南</a>
@@ -142,7 +147,7 @@ function InfoPage({ id }) {
 
 // ---------- 首頁 ----------
 function Home({ products, loading, query, filter, setFilter }) {
-  const listed = useMemo(() => products.filter((p) => p.status !== 'N'), [products]);
+  const listed = useMemo(() => products.filter((p) => p.status !== 'N' && !isGlue(p)), [products]);
   const newest = useMemo(() => [...listed].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''))), [listed]);
   const newIds = useMemo(() => new Set(newest.slice(0, 12).map((p) => p.docId)), [newest]);
   const [visible, setVisible] = useState(24);
@@ -273,8 +278,64 @@ function Card({ product: p, isNew }) {
     </a>`;
 }
 
+// ---------- 果凍膠 ----------
+// 款式頁與結帳頁的加購提醒；建檔系統還沒有果凍膠商品時不顯示
+function GlueOffer({ glue, cart, addToCart }) {
+  if (!glue || glue.status === 'N') return null;
+  const inCart = cart.some((l) => l.id === glue.docId);
+  const size = glueSize(glue);
+  return html`
+    <div class="glue-offer">
+      <div class="glue-offer-text">
+        <strong>💎 ${GLUE_PAGE.offerTitle}</strong>
+        <span>${GLUE_PAGE.offerText}</span>
+        <a href="#/glue">了解果凍膠 →</a>
+      </div>
+      <div class="glue-offer-buy">
+        <span class="price">${money(glue.price)}</span>
+        ${inCart ? html`<span class="glue-added">✓ 已加入</span>`
+          : size ? html`<button type="button" class="btn btn-ghost" onClick=${() => addToCart(glue, size, 1)}>一起加入</button>`
+          : html`<span class="muted" style="font-size:13px">補貨中</span>`}
+      </div>
+    </div>`;
+}
+
+function GluePage({ glue, cart, addToCart }) {
+  const g = GLUE_PAGE;
+  useEffect(() => window.scrollTo(0, 0), []);
+  const size = glueSize(glue);
+  const inCart = glue && cart.some((l) => l.id === glue.docId);
+  const [added, setAdded] = useState(false);
+  return html`
+    <section class="container section glue-page">
+      <div class="glue-hero">
+        <div class="script">${g.script}</div>
+        <h1 class="serif">💎 ${g.title}</h1>
+        <p class="glue-sub">${g.subtitle}</p>
+        <p>${g.intro}</p>
+        ${glue && glue.status !== 'N' ? html`
+          <div class="glue-buy">
+            <span class="price" style="font-size:26px">${money(glue.price)}</span>
+            ${size ? html`<button class="btn btn-primary" onClick=${() => { addToCart(glue, size, 1); setAdded(true); }}>${inCart ? '再加一份' : '加入購物車'}</button>`
+              : html`<span class="muted">目前補貨中</span>`}
+          </div>
+          ${added && html`<div class="notice notice-mint" role="status">已加入購物車　<a href="#/checkout">前往結帳 →</a></div>`}`
+          : html`<div class="notice notice-pink">即將上架，想先購買歡迎來信 <a href=${`mailto:${SITE.contactEmail}`}>${SITE.contactEmail}</a></div>`}
+      </div>
+      <div class="glue-features">
+        ${g.features.map((f) => html`<div class="glue-feature"><div class="glue-icon">${f.icon}</div><strong>${f.title}</strong><span>${f.text}</span></div>`)}
+      </div>
+      <div class="glue-reasons">
+        <h2>💖 ${g.reasonsTitle}</h2>
+        ${g.reasons.map(([t, d]) => html`<div class="glue-reason"><strong>${t}</strong><p>${d}</p></div>`)}
+      </div>
+      <p class="glue-tip">💡 ${g.tip}</p>
+      <div style="text-align:center;margin-top:24px"><a class="btn btn-ghost" href="#/" onClick=${(e) => { e.preventDefault(); scrollToId('shop'); }}>去挑選穿戴甲</a></div>
+    </section>`;
+}
+
 // ---------- 商品頁 ----------
-function ProductPage({ id, products, loading, addToCart }) {
+function ProductPage({ id, products, loading, addToCart, glue, cart }) {
   const p = products.find((x) => x.docId === id);
   const media = (p?.media || []).filter((m) => m.url);
   const firstOpen = SIZES.find((s) => Number(p?.stock?.[s]) > 0) || '';
@@ -289,7 +350,7 @@ function ProductPage({ id, products, loading, addToCart }) {
 
   const max = Number(p.stock?.[size] || 0);
   const current = media[photo];
-  const related = products.filter((x) => x.docId !== p.docId && x.status !== 'N' && x.shape === p.shape && totalStock(x) > 0).slice(0, 4);
+  const related = products.filter((x) => x.docId !== p.docId && x.status !== 'N' && x.shape === p.shape && !isGlue(x) && totalStock(x) > 0).slice(0, 4);
   const tags = String(p.hashtags || '').split('#').map((t) => t.trim()).filter(Boolean).slice(0, 5);
 
   return html`
@@ -350,6 +411,8 @@ function ProductPage({ id, products, loading, addToCart }) {
                   onClick=${() => { addToCart(p, size, qty); setAdded(true); }}>加入購物車</button>
               </div>`}
           ${added && html`<div class="notice notice-mint" role="status">已加入購物車：${p.name} ${size} × ${qty}　<a href="#/checkout">前往結帳 →</a></div>`}
+
+          ${!isGlue(p) && html`<${GlueOffer} glue=${glue} cart=${cart} addToCart=${addToCart} />`}
 
           <div class="perks"><span>綠界安全付款</span><span>超商取貨</span><span>手作出貨</span></div>
         </div>
@@ -412,7 +475,7 @@ function CartDrawer({ cart, setCart, onClose, promo, setPromo, quote }) {
             <div class="thumbnail">${l.image ? html`<img src=${l.image} alt="" />` : html`<div class="placeholder"><${NailIcon} size=${24} /></div>`}</div>
             <div class="line-main">
               <strong>${l.name}</strong>
-              <span class="muted" style="font-size:13px">尺寸 ${l.size}</span>
+              <span class="muted" style="font-size:13px">${isGlue(l) ? '加購' : `尺寸 ${l.size}`}</span>
               <div class="line-row">
                 <div class="mini-qty">
                   <button aria-label="減少" onClick=${() => update(i, l.qty - 1)}>−</button><span style="width:24px;text-align:center">${l.qty}</span><button aria-label="增加" onClick=${() => update(i, Math.min(20, l.qty + 1))}>+</button>
@@ -438,7 +501,7 @@ function CartDrawer({ cart, setCart, onClose, promo, setPromo, quote }) {
 }
 
 // ---------- 結帳 ----------
-function Checkout({ cart, user, quote, promo }) {
+function Checkout({ cart, user, quote, promo, glue, addToCart }) {
   const [form, setForm] = useState({ name: user?.displayName || '', phone: '', email: user?.email || '' });
   const [method, setMethod] = useState('UNIMARTC2C');
   const [payment, setPayment] = useState('online');
@@ -493,6 +556,8 @@ function Checkout({ cart, user, quote, promo }) {
         <h1 class="serif" style="margin:0;font-size:32px">結帳</h1>
         ${isInAppBrowser() && html`<div class="notice notice-peach">你正在 LINE／Facebook／Instagram 的內建瀏覽器中，綠界付款可能會失敗。請點右上角「⋯」選擇「用預設瀏覽器開啟」後再結帳。</div>`}
 
+        <${GlueOffer} glue=${glue} cart=${cart} addToCart=${addToCart} />
+
         <section class="panel">
           <h2>收件人</h2>
           <div class="fields">
@@ -525,7 +590,7 @@ function Checkout({ cart, user, quote, promo }) {
       <aside class="checkout-side panel">
         <h2>訂單摘要</h2>
         <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px">
-          ${cart.map((l) => html`<div class="sum-row"><span>${l.name} ${l.size} × ${l.qty}</span><span>${money(l.price * l.qty)}</span></div>`)}
+          ${cart.map((l) => html`<div class="sum-row"><span>${l.name}${isGlue(l) ? '' : ` ${l.size}`} × ${l.qty}</span><span>${money(l.price * l.qty)}</span></div>`)}
         </div>
         <${Summary} cart=${cart} quote=${quote} />
         ${error && html`<div class="notice notice-pink" role="alert" style="margin-top:12px">${error}</div>`}
@@ -618,6 +683,7 @@ function App() {
     return p ? { ...l, name: p.name, price: Number(p.price), image: firstImage(p) } : l;
   });
   const quote = useQuote(liveCart, promo);
+  const glue = useMemo(() => products.find((p) => p.status !== 'N' && isGlue(p)), [products]);
 
   const addToCart = (p, size, qty) => {
     const existing = cart.find((l) => l.id === p.docId && l.size === size);
@@ -634,8 +700,9 @@ function App() {
     <main>
       ${loadError && html`<div class="container"><div class="notice notice-peach" style="margin-top:16px">${loadError}</div></div>`}
       ${route.name === 'home' && html`<${Home} products=${products} loading=${loading} query=${query} filter=${filter} setFilter=${setFilter} />`}
-      ${route.name === 'product' && html`<${ProductPage} id=${route.id} products=${products} loading=${loading} addToCart=${addToCart} />`}
-      ${route.name === 'checkout' && html`<${Checkout} cart=${liveCart} user=${user} quote=${quote} promo=${promo} />`}
+      ${route.name === 'product' && html`<${ProductPage} id=${route.id} products=${products} loading=${loading} addToCart=${addToCart} glue=${glue} cart=${liveCart} />`}
+      ${route.name === 'checkout' && html`<${Checkout} cart=${liveCart} user=${user} quote=${quote} promo=${promo} glue=${glue} addToCart=${addToCart} />`}
+      ${route.name === 'glue' && html`<${GluePage} glue=${glue} cart=${liveCart} addToCart=${addToCart} />`}
       ${route.name === 'orders' && html`<${Orders} user=${user} banner=${banner} />`}
       ${route.name === 'page' && html`<${InfoPage} id=${route.id} />`}
     </main>
