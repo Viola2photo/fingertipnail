@@ -293,7 +293,7 @@ function GlueOffer({ glue, cart, addToCart }) {
       <div class="glue-offer-text">
         <strong>💎 ${GLUE_PAGE.offerTitle}</strong>
         <span>${GLUE_PAGE.offerText}</span>
-        <a href="#/glue">了解果凍膠、怎麼選大小碼 →</a>
+        <a href="#/glue">了解果凍膠（一般甲面選大碼，XS 或甲面偏瘦小選小碼）→</a>
         <small class="muted">${GLUE_PAGE.bundleNote}</small>
       </div>
       <div class="glue-offer-buy">
@@ -333,7 +333,7 @@ function GluePage({ glue, cart, addToCart }) {
           <div class="glue-size-pick" role="radiogroup" aria-label="尺寸">
             ${g.sizes.map((s) => {
               const out = onSale && glueStock(glue, s.key) <= 0;
-              return html`<button type="button" role="radio" aria-checked=${s.key === sel.key} class=${`glue-size-btn${s.key === sel.key ? ' on' : ''}${out ? ' out' : ''}`} onClick=${() => { setSizeKey(s.key); setQty(1); }}>${s.label}${out ? '（補貨中）' : ''}</button>`;
+              return html`<button type="button" role="radio" aria-checked=${s.key === sel.key} class=${`glue-size-btn${s.key === sel.key ? ' on' : ''}${out ? ' out' : ''}`} onClick=${() => { setSizeKey(s.key); setQty(1); }}>${s.label}${s.badge && !out ? html`<small class="glue-badge">${s.badge}</small>` : ''}${out ? '（補貨中）' : ''}</button>`;
             })}
           </div>
           <p class="glue-size-note">${sel.note}</p>

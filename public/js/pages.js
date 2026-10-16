@@ -109,11 +109,11 @@ export const GLUE_PAGE = {
   specsTitle: '詳細規格',
   // 大碼／小碼：庫存記在建檔系統的 L（大碼）與 S（小碼）欄位
   sizes: [
-    { key: 'L', label: '大碼', img: 'img/glue-large.webp', note: '膠片較大，適合指甲較寬，或穿 M、L 尺寸的穿戴甲' },
-    { key: 'S', label: '小碼', img: 'img/glue-small.webp', note: '膠片較小，適合指甲較窄，或穿 XS、S 尺寸的穿戴甲' },
+    { key: 'L', label: '大碼', img: 'img/glue-large.webp', note: '推薦大多數人選大碼：膠片能盡量補滿甲面，黏得更牢。', badge: '推薦' },
+    { key: 'S', label: '小碼', img: 'img/glue-small.webp', note: '只建議穿 XS 尺寸，或甲面偏瘦小的人選小碼。' },
   ],
   specs: [
-    ['尺寸', '大碼、小碼（依指甲寬度選擇）'],
+    ['尺寸', '大碼（推薦，一般甲面）、小碼（XS 或甲面偏瘦小）'],
     ['內容物', '一包 5 張，每張 24 小片（多種尺寸符合各甲型）'],
     ['建議天數', '10～20 天以上（因個人使用習慣而異）'],
     ['適用對象', '一般成人、穿戴甲初學者'],

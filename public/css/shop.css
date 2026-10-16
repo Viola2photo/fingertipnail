@@ -256,6 +256,7 @@ button { cursor: pointer; }
 .glue-size-pick { display: flex; gap: 10px; margin-top: 6px; }
 .glue-size-btn { min-width: 96px; height: 48px; padding: 0 18px; border-radius: 16px; border: 1.5px solid #E7A6C2; background: #fff; font-weight: 700; font-size: 16px; color: var(--ink, #3A2340); }
 .glue-size-btn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.glue-badge { margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: var(--pink, #FCE4EE); color: var(--accent-dark); font-size: 11px; vertical-align: 2px; }
 .glue-size-btn.out { opacity: .5; }
 .glue-size-note { font-size: 14px; color: #4A3050; }
 @media (max-width: 760px) { .glue-product { grid-template-columns: 1fr; gap: 18px; } }
