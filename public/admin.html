@@ -59,6 +59,7 @@
     const ordersCol = shopRoot.collection('orders');
     const movementsCol = shopRoot.collection('stockMovements');
     const shippingSettingsDoc = shopRoot.collection('settings').doc('shipping');
+    const siteTextDoc = shopRoot.collection('settings').doc('siteText');
     // 超商物流的姓名規則（與伺服器 logisticsName 相同）：中文 2～5 字，或英文 4～10 個字母
     const validPickupName = (name) => {
       const s = String(name || '').replace(/\s+/g, '');
@@ -1046,6 +1047,57 @@
       );
     }
 
+    // ---------- 網站文字 ----------
+    // 欄位清單與預設文字在 js/site-text.js（和前台共用）；空白的欄位網站會用預設文字
+    function SiteText({ notify }) {
+      const [fields, setFields] = useState(null);
+      const [form, setForm] = useState(null);
+      const [saving, setSaving] = useState(false);
+      useEffect(() => {
+        Promise.all([import('/js/site-text.js'), siteTextDoc.get()])
+          .then(([mod, d]) => { setFields(mod.SITE_TEXT_FIELDS); setForm(mod.mergeSiteText(d.exists ? d.data() : null)); })
+          .catch(e => notify(`讀取失敗：${e.message}`, 'error'));
+      }, []);
+      const save = async () => {
+        setSaving(true);
+        try {
+          // 和原本文字相同的欄位存成空白，之後程式裡的預設文字更新時會跟著變
+          const data = Object.fromEntries(fields.map(f => { const v = String(form[f.key] || '').trim(); return [f.key, v === f.default ? '' : v]; }));
+          await siteTextDoc.set({ ...data, updatedAt: new Date().toISOString() });
+          setForm(Object.fromEntries(fields.map(f => [f.key, data[f.key] || f.default])));
+          notify('已儲存，網站已更新');
+        } catch (e) { notify(e.message, 'error'); }
+        setSaving(false);
+      };
+      if (!fields || !form) return <p className="muted">載入中…</p>;
+      const groups = [...new Set(fields.map(f => f.group))];
+      return (
+        <div className="space-y-6 max-w-3xl">
+          <div><h1 className="serif text-3xl font-bold">網站文字</h1><p className="muted text-sm mt-1">直接修改框裡的文字，按「儲存」後網站馬上更新。改壞了可以按「恢復原本文字」。</p></div>
+          {groups.map(g => (
+            <section key={g} className="card p-5 space-y-4">
+              <h2 className="font-bold text-lg">{g}</h2>
+              {fields.filter(f => f.group === g).map(f => {
+                const val = form[f.key] || '';
+                const props = { className: 'input w-full', value: val, onChange: e => setForm({ ...form, [f.key]: e.target.value }) };
+                return (
+                  <label key={f.key} className="block space-y-1 text-sm">
+                    <span className="font-bold flex items-center justify-between gap-2">{f.label}
+                      {val !== f.default && <button type="button" className="text-xs muted underline font-normal" onClick={() => setForm({ ...form, [f.key]: f.default })}>恢復原本文字</button>}</span>
+                    {f.multiline ? <textarea rows={3} {...props} style={{ minHeight: 84, paddingTop: 10 }} /> : <input {...props} />}
+                  </label>
+                );
+              })}
+            </section>
+          ))}
+          <div className="flex flex-wrap gap-2 items-center">
+            <button className="btn btn-primary" disabled={saving} onClick={save}>{saving ? '儲存中…' : '儲存'}</button>
+            <a className="btn btn-ghost" href="/" target="_blank" rel="noopener">開新分頁看網站</a>
+          </div>
+        </div>
+      );
+    }
+
     // ---------- 財務與報表 ----------
     // 與你目前的商品表相同的欄位，方便盤點或日後搬到其他平台
     const EXPORT_HEADERS = ['商品名稱(必填)', '商品規格類型', '商品規格名稱', '商品貨號', '商品成本(NT.)', '商品售價(NT.)(必填)', '商品庫存(必填)', '商品所有分類', '商品狀態(Y:上架/N:下架)', '商品 SEO-Title', '商品 SEO-Description', '商品 SEO-Keywords', '商品描述', '商品副標題', '商品圖片', '商品重量(公斤)', '商品長度(公分)', '商品寬度(公分)', '商品高度(公分)'];
@@ -1160,7 +1212,7 @@
 
       const go = (p, filter) => { setPage(p); setInvFilter(filter || null); window.scrollTo(0, 0); };
       const toShip = orders.filter(o => o.status === 'paid').length;
-      const nav = [['dashboard', '總覽'], ['inventory', '商品與庫存'], ['new', '上架新款'], ['orders', '訂單與出貨'], ['finance', '財務與報表']];
+      const nav = [['dashboard', '總覽'], ['inventory', '商品與庫存'], ['new', '上架新款'], ['orders', '訂單與出貨'], ['finance', '財務與報表'], ['sitetext', '網站文字']];
 
       if (user === undefined) return <div className="p-10 text-center muted">載入中…</div>;
       if (!isAdmin) return (
@@ -1196,6 +1248,7 @@
             {page === 'new' && <NewStyle inventory={inventory} notify={notify} />}
             {page === 'orders' && <Orders orders={orders} notify={notify} />}
             {page === 'finance' && <Finance orders={orders} inventory={inventory} />}
+            {page === 'sitetext' && <SiteText notify={notify} />}
           </main>
           <Toast toast={toast} onClose={() => setToast(null)} />
         </div>
