@@ -15,12 +15,6 @@ service cloud.firestore {
       allow write: if isOwner();
     }
 
-    // 後台「網站文字」：商店頁要讀，只有店家能改（同資料夾的出貨設定仍不公開）
-    match /artifacts/nail-inventory-app/users/MvkJo5e1kEcBS0fGGMr4RKdQjYg1/settings/siteText {
-      allow read: if true;
-      allow write: if isOwner();
-    }
-
     // 店家的訂單、進出貨紀錄等其他資料
     match /artifacts/nail-inventory-app/users/MvkJo5e1kEcBS0fGGMr4RKdQjYg1/{collection}/{docId} {
       allow read, write: if isOwner();
