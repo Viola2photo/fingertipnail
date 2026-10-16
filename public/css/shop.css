@@ -127,6 +127,7 @@ button { cursor: pointer; }
 .size-guide h2 { margin: 0 0 10px; font-family: var(--serif); font-size: 28px; }
 .size-cells { flex: 1 1 380px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 .size-cell { background: #fff; border-radius: 18px; padding: 16px 8px; text-align: center; }
+.size-cells-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
 .size-cell strong { font-family: var(--serif); font-size: 24px; color: var(--lavender-ink); display: block; }
 .footer { margin-top: 80px; background: var(--ink); color: #F6E7EF; }
 .footer-inner { display: flex; flex-wrap: wrap; gap: 40px; justify-content: space-between; padding-top: 48px; padding-bottom: 48px; font-size: 14px; }
