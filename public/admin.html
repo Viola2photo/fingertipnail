@@ -65,6 +65,8 @@
       const n = Array.from(s).length;
       return (/^\p{Script=Han}+$/u.test(s) && n >= 2 && n <= 5) || (/^[A-Za-z]+$/.test(s) && n >= 4 && n <= 10);
     };
+    // 果凍膠的大碼／小碼存在 L、S 庫存欄位
+    const itemSize = (i) => (String(i?.name || '').includes('果凍膠') ? ({ L: '大碼', S: '小碼' }[i.size] || i.size) : i.size);
     const isCod = (o) => o?.payment?.paymentType === 'COD';
     const payLabel = (o) => isCod(o) ? (o.payment.collected ? '取貨付款（已收款）' : '取貨付款') : (o.payment?.paymentType || '');
 
@@ -847,7 +849,7 @@
                 {order.items?.map((i, k) => (
                   <div key={k} className="flex gap-3 items-center">
                     {i.image ? <img src={i.image} alt="" className="w-10 h-12 rounded-lg object-cover" /> : <span className="w-10 h-12 rounded-lg bg-[#F6E3EC]" />}
-                    <span className="flex-1"><strong>{i.name}</strong><span className="block text-xs muted">{i.id} ・ {i.size} × {i.quantity}</span></span>
+                    <span className="flex-1"><strong>{i.name}</strong><span className="block text-xs muted">{i.id} ・ {itemSize(i)} × {i.quantity}</span></span>
                     <span>{money(i.price * i.quantity)}</span>
                   </div>
                 ))}
@@ -926,7 +928,7 @@
     function printPickList(orders) {
       const w = window.open('', '_blank');
       const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-      const rows = orders.map(o => `<tr><td>${esc(o.merchantTradeNo)}</td><td>${esc(o.customerInfo?.name)}</td><td>${o.items.map(i => `${esc(i.id)} ${esc(i.name)} <b>${esc(i.size)}</b> ×${i.quantity}`).join('<br>')}</td><td>${esc(o.customerInfo?.address)}</td><td>${esc(o.logistics?.cvsPaymentNo || '')}${o.logistics?.cvsValidationNo ? `<br>驗證碼 ${esc(o.logistics.cvsValidationNo)}` : ''}</td><td>${o.payment?.paymentType === 'COD' ? `取貨付款<br><b>NT$${Number(o.totalAmount).toLocaleString()}</b>` : '已付款'}</td></tr>`).join('');
+      const rows = orders.map(o => `<tr><td>${esc(o.merchantTradeNo)}</td><td>${esc(o.customerInfo?.name)}</td><td>${o.items.map(i => `${esc(i.id)} ${esc(i.name)} <b>${esc(itemSize(i))}</b> ×${i.quantity}`).join('<br>')}</td><td>${esc(o.customerInfo?.address)}</td><td>${esc(o.logistics?.cvsPaymentNo || '')}${o.logistics?.cvsValidationNo ? `<br>驗證碼 ${esc(o.logistics.cvsValidationNo)}` : ''}</td><td>${o.payment?.paymentType === 'COD' ? `取貨付款<br><b>NT$${Number(o.totalAmount).toLocaleString()}</b>` : '已付款'}</td></tr>`).join('');
       w.document.write(`<!DOCTYPE html><meta charset="utf-8"><title>揀貨單</title><style>body{font-family:sans-serif;padding:24px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #999;padding:8px;font-size:13px;text-align:left;vertical-align:top}</style><h2>揀貨單（${orders.length} 筆）</h2><table><tr><th>訂單</th><th>收件人</th><th>商品</th><th>取貨</th><th>寄貨編號</th><th>付款</th></tr>${rows}</table><script>print()<\/script>`);
       w.document.close();
     }
@@ -1030,7 +1032,7 @@
                   <input type="checkbox" aria-label={`選取 ${o.merchantTradeNo}`} className="w-5 h-5" disabled={!(o.status === 'paid' && o.shipping?.method === 'CVS')} checked={selected.includes(o.merchantTradeNo)} onChange={e => setSelected(e.target.checked ? [...selected, o.merchantTradeNo] : selected.filter(x => x !== o.merchantTradeNo))} />
                   <button className="text-left font-bold text-[#A8325F] underline-offset-2 hover:underline" onClick={() => setOpenId(o.merchantTradeNo)}>{o.merchantTradeNo}</button>
                   <span className="muted">{fmtTime(o.createdAt)}</span>
-                  <span className="leading-6">{o.items?.map(i => `${i.name} ${i.size}×${i.quantity}`).join('、')}<span className="block text-xs muted">{o.customerInfo?.name}</span></span>
+                  <span className="leading-6">{o.items?.map(i => `${i.name} ${itemSize(i)}×${i.quantity}`).join('、')}<span className="block text-xs muted">{o.customerInfo?.name}</span></span>
                   <strong>{money(o.totalAmount)}</strong>
                   <span className="text-xs">{o.payment ? payLabel(o) : (o.paymentInfo ? `待繳：${o.paymentInfo.paymentType}` : '—')}</span>
                   <span className="text-xs leading-5">{o.customerInfo?.address}{o.logistics?.cvsPaymentNo && <span className="block font-bold text-[#A8325F]">寄貨編號 {o.logistics.cvsPaymentNo}{o.logistics.cvsValidationNo && ` ・ 驗證碼 ${o.logistics.cvsValidationNo}`}</span>}{o.logistics?.lastStatus && <span className="block muted">{o.logistics.lastStatus.message}</span>}</span>

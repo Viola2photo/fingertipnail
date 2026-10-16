@@ -18,7 +18,9 @@ const validPickupName = (name) => {
 };
 // 果凍膠是加購品，用名稱辨認（關鍵字在 config.js 的 SITE.glueKeyword）
 const isGlue = (p) => Boolean(SITE.glueKeyword) && String(p?.name || '').includes(SITE.glueKeyword);
-const glueSize = (p) => SIZES.find((s) => Number(p?.stock?.[s] || 0) > 0) || '';
+// 果凍膠分大碼／小碼，借用 L、S 兩個庫存欄位（伺服器不用改）
+const glueStock = (p, key) => Number(p?.stock?.[key] || 0);
+const sizeLabel = (l) => (isGlue(l) ? GLUE_PAGE.sizes.find((s) => s.key === l.size)?.label || l.size : l.size);
 const isInAppBrowser = () => /Line\/|FBAN|FBAV|Instagram/i.test(navigator.userAgent);
 
 function parseRoute() {
@@ -284,20 +286,21 @@ function Card({ product: p, isNew }) {
 // 款式頁與結帳頁的加購提醒；建檔系統還沒有果凍膠商品時不顯示
 function GlueOffer({ glue, cart, addToCart }) {
   if (!glue || glue.status === 'N') return null;
-  const inCart = cart.some((l) => l.id === glue.docId);
-  const size = glueSize(glue);
+  const inCart = (key) => cart.some((l) => l.id === glue.docId && l.size === key);
+  const sizes = GLUE_PAGE.sizes.filter((s) => glueStock(glue, s.key) > 0);
   return html`
     <div class="glue-offer">
       <div class="glue-offer-text">
         <strong>💎 ${GLUE_PAGE.offerTitle}</strong>
         <span>${GLUE_PAGE.offerText}</span>
-        <a href="#/glue">了解果凍膠 →</a>
+        <a href="#/glue">了解果凍膠、怎麼選大小碼 →</a>
         <small class="muted">${GLUE_PAGE.bundleNote}</small>
       </div>
       <div class="glue-offer-buy">
         <span class="price">${money(glue.price)}</span>
-        ${inCart ? html`<span class="glue-added">✓ 已加入</span>`
-          : size ? html`<button type="button" class="btn btn-ghost" onClick=${() => addToCart(glue, size, 1)}>一起加入</button>`
+        ${sizes.length ? sizes.map((s) => inCart(s.key)
+          ? html`<span class="glue-added">✓ ${s.label}已加入</span>`
+          : html`<button type="button" class="btn btn-ghost" onClick=${() => addToCart(glue, s.key, 1)}>加購${s.label}</button>`)
           : html`<span class="muted" style="font-size:13px">補貨中</span>`}
       </div>
     </div>`;
@@ -306,24 +309,49 @@ function GlueOffer({ glue, cart, addToCart }) {
 function GluePage({ glue, cart, addToCart }) {
   const g = GLUE_PAGE;
   useEffect(() => window.scrollTo(0, 0), []);
-  const size = glueSize(glue);
-  const inCart = glue && cart.some((l) => l.id === glue.docId);
-  const [added, setAdded] = useState(false);
+  const onSale = glue && glue.status !== 'N';
+  const firstInStock = g.sizes.find((s) => glueStock(glue, s.key) > 0) || g.sizes[0];
+  const [sizeKey, setSizeKey] = useState(firstInStock.key);
+  const [qty, setQty] = useState(1);
+  const [added, setAdded] = useState('');
+  const sel = g.sizes.find((s) => s.key === sizeKey) || g.sizes[0];
+  const stock = glueStock(glue, sel.key);
   return html`
     <section class="container section glue-page">
-      <div class="glue-hero">
-        <div class="script">${g.script}</div>
-        <h1 class="serif">${g.title}</h1>
-        <p class="glue-sub">${g.subtitle}</p>
-        ${glue && glue.status !== 'N' ? html`
-          <div class="glue-buy">
-            <span class="price" style="font-size:26px">${money(glue.price)}</span>
-            ${size ? html`<button class="btn btn-primary" onClick=${() => { addToCart(glue, size, 1); setAdded(true); }}>${inCart ? '再加一份' : '加入購物車'}</button>`
-              : html`<span class="muted">目前補貨中</span>`}
+      <div class="glue-product">
+        <div class="glue-gallery">
+          <img src=${sel.img} alt=${`果凍膠${sel.label}`} />
+          <div class="glue-thumbs">
+            ${g.sizes.map((s) => html`<button type="button" class=${s.key === sel.key ? 'on' : ''} onClick=${() => { setSizeKey(s.key); setQty(1); }} aria-label=${s.label}><img src=${s.img} alt="" /></button>`)}
           </div>
-          ${added && html`<div class="notice notice-mint" role="status">已加入購物車　<a href="#/checkout">前往結帳 →</a></div>`}`
-          : html`<div class="notice notice-pink">即將上架，想先購買歡迎來信 <a href=${`mailto:${SITE.contactEmail}`}>${SITE.contactEmail}</a></div>`}
-        <p class="muted" style="font-size:13px">${g.bundleNote}</p>
+        </div>
+        <div class="glue-hero">
+          <div class="script">${g.script}</div>
+          <h1 class="serif">${g.title}</h1>
+          <p class="glue-sub">${g.subtitle}</p>
+          ${onSale && html`<span class="price" style="font-size:28px">${money(glue.price)}</span>`}
+          <div class="glue-size-pick" role="radiogroup" aria-label="尺寸">
+            ${g.sizes.map((s) => {
+              const out = onSale && glueStock(glue, s.key) <= 0;
+              return html`<button type="button" role="radio" aria-checked=${s.key === sel.key} class=${`glue-size-btn${s.key === sel.key ? ' on' : ''}${out ? ' out' : ''}`} onClick=${() => { setSizeKey(s.key); setQty(1); }}>${s.label}${out ? '（補貨中）' : ''}</button>`;
+            })}
+          </div>
+          <p class="glue-size-note">${sel.note}</p>
+          ${onSale ? html`
+            <div class="glue-buy">
+              ${stock > 0 ? html`
+                <div class="qty" aria-label="數量">
+                  <button type="button" onClick=${() => setQty(Math.max(1, qty - 1))} aria-label="減少">−</button>
+                  <span>${qty}</span>
+                  <button type="button" onClick=${() => setQty(Math.min(stock, qty + 1))} aria-label="增加">＋</button>
+                </div>
+                <button class="btn btn-primary" onClick=${() => { addToCart(glue, sel.key, qty); setAdded(sel.label); }}>加入購物車</button>`
+                : html`<span class="muted">${sel.label}目前補貨中</span>`}
+            </div>
+            ${added && html`<div class="notice notice-mint" role="status">${added}已加入購物車　<a href="#/checkout">前往結帳 →</a></div>`}`
+            : html`<div class="notice notice-pink">即將上架，想先購買歡迎來信 <a href=${`mailto:${SITE.contactEmail}`}>${SITE.contactEmail}</a></div>`}
+          <p class="muted" style="font-size:13px">${g.bundleNote}</p>
+        </div>
       </div>
       <div class="glue-features">
         ${g.features.map((f) => html`<div class="glue-feature"><span class="glue-icon">${f.icon}</span><strong>${f.title}</strong></div>`)}
@@ -522,7 +550,7 @@ function CartDrawer({ cart, setCart, onClose, promo, setPromo, quote }) {
             <div class="thumbnail">${l.image ? html`<img src=${l.image} alt="" />` : html`<div class="placeholder"><${NailIcon} size=${24} /></div>`}</div>
             <div class="line-main">
               <strong>${l.name}</strong>
-              <span class="muted" style="font-size:13px">${isGlue(l) ? '加購' : `尺寸 ${l.size}`}</span>
+              <span class="muted" style="font-size:13px">${isGlue(l) ? `加購・${sizeLabel(l)}` : `尺寸 ${l.size}`}</span>
               <div class="line-row">
                 <div class="mini-qty">
                   <button aria-label="減少" onClick=${() => update(i, l.qty - 1)}>−</button><span style="width:24px;text-align:center">${l.qty}</span><button aria-label="增加" onClick=${() => update(i, Math.min(20, l.qty + 1))}>+</button>
@@ -637,7 +665,7 @@ function Checkout({ cart, user, quote, promo, glue, addToCart }) {
       <aside class="checkout-side panel">
         <h2>訂單摘要</h2>
         <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px">
-          ${cart.map((l) => html`<div class="sum-row"><span>${l.name}${isGlue(l) ? '' : ` ${l.size}`} × ${l.qty}</span><span>${money(l.price * l.qty)}</span></div>`)}
+          ${cart.map((l) => html`<div class="sum-row"><span>${l.name} ${sizeLabel(l)} × ${l.qty}</span><span>${money(l.price * l.qty)}</span></div>`)}
         </div>
         <${Summary} cart=${cart} quote=${quote} />
         ${error && html`<div class="notice notice-pink" role="alert" style="margin-top:12px">${error}</div>`}
