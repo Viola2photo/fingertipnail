@@ -329,7 +329,7 @@ function GluePage({ glue, cart, addToCart }) {
           <div class="script">${g.script}</div>
           <h1 class="serif">${g.title}</h1>
           <p class="glue-sub">${g.subtitle}</p>
-          ${onSale && html`<span class="price" style="font-size:28px">${money(glue.price)}</span>`}
+          <div class="glue-price"><span class="price" style="font-size:28px">${money(onSale ? glue.price : g.price)}</span><span class="muted">／包（${g.packNote}）</span></div>
           <div class="glue-size-pick" role="radiogroup" aria-label="尺寸">
             ${g.sizes.map((s) => {
               const out = onSale && glueStock(glue, s.key) <= 0;

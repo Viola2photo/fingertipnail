@@ -258,6 +258,7 @@ button { cursor: pointer; }
 .glue-size-btn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 .glue-badge { margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: var(--pink, #FCE4EE); color: var(--accent-dark); font-size: 11px; vertical-align: 2px; }
 .glue-size-btn.out { opacity: .5; }
+.glue-price { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; font-size: 14px; }
 .glue-size-note { font-size: 14px; color: #4A3050; }
 @media (max-width: 760px) { .glue-product { grid-template-columns: 1fr; gap: 18px; } }
 .glue-features { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 32px; padding: 20px 0; border-top: 1px solid var(--line-2); border-bottom: 1px solid var(--line-2); }
