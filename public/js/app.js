@@ -313,9 +313,8 @@ function GluePage({ glue, cart, addToCart }) {
     <section class="container section glue-page">
       <div class="glue-hero">
         <div class="script">${g.script}</div>
-        <h1 class="serif">💎 ${g.title}</h1>
+        <h1 class="serif">${g.title}</h1>
         <p class="glue-sub">${g.subtitle}</p>
-        <p>${g.intro}</p>
         ${glue && glue.status !== 'N' ? html`
           <div class="glue-buy">
             <span class="price" style="font-size:26px">${money(glue.price)}</span>
@@ -324,17 +323,29 @@ function GluePage({ glue, cart, addToCart }) {
           </div>
           ${added && html`<div class="notice notice-mint" role="status">已加入購物車　<a href="#/checkout">前往結帳 →</a></div>`}`
           : html`<div class="notice notice-pink">即將上架，想先購買歡迎來信 <a href=${`mailto:${SITE.contactEmail}`}>${SITE.contactEmail}</a></div>`}
+        <p class="muted" style="font-size:13px">${g.bundleNote}</p>
       </div>
       <div class="glue-features">
-        ${g.features.map((f) => html`<div class="glue-feature"><div class="glue-icon">${f.icon}</div><strong>${f.title}</strong><span>${f.text}</span></div>`)}
+        ${g.features.map((f) => html`<div class="glue-feature"><span class="glue-icon">${f.icon}</span><strong>${f.title}</strong></div>`)}
       </div>
-      <div class="glue-reasons">
-        <h2>💖 ${g.reasonsTitle}</h2>
-        ${g.reasons.map(([t, d]) => html`<div class="glue-reason"><strong>${t}</strong><p>${d}</p></div>`)}
+
+      <h2 class="glue-title">${g.highlightsTitle}</h2>
+      ${g.highlights.map(([t, d]) => html`<div class="glue-box"><h3>♥ ${t}</h3><p>${d}</p></div>`)}
+
+      <div class="glue-steps-wrap">
+        <h2 class="glue-title">${g.stepsTitle}</h2>
+        <ol class="guide-steps">
+          ${g.steps.map((t, i) => html`<li><span class="guide-num">${i + 1}</span><div><span>${t}</span></div></li>`)}
+        </ol>
       </div>
-      <p class="glue-tip">💡 ${g.tip}</p>
-      <p class="muted" style="text-align:center;font-size:13px;margin:8px 0 0">${g.bundleNote}</p>
-      <div style="text-align:center;margin-top:24px"><a class="btn btn-ghost" href="#/" onClick=${(e) => { e.preventDefault(); scrollToId('shop'); }}>去挑選穿戴甲</a></div>
+
+      <h2 class="glue-title">${g.specsTitle}</h2>
+      <table class="glue-specs">
+        ${g.specs.map(([k, v]) => html`<tr><th>${k}</th><td>${v}</td></tr>`)}
+      </table>
+
+      <p class="glue-footer">${g.footer.map((t) => html`<span>${t}</span>`)}</p>
+      <div style="text-align:center;margin-top:20px"><a class="btn btn-ghost" href="#/" onClick=${(e) => { e.preventDefault(); scrollToId('shop'); }}>去挑選穿戴甲</a></div>
     </section>`;
 }
 

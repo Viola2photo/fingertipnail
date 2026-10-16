@@ -245,18 +245,21 @@ button { cursor: pointer; }
 .glue-hero p { margin: 0; max-width: 560px; line-height: 1.9; }
 .glue-sub { color: var(--accent); font-size: 15px; }
 .glue-buy { display: flex; align-items: center; gap: 16px; margin-top: 8px; }
-.glue-features { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-top: 32px; }
-.glue-feature { background: #fff; border: 1px solid var(--line-2); border-radius: 18px; padding: 18px 14px; text-align: center; display: flex; flex-direction: column; gap: 4px; }
-.glue-feature strong { color: var(--accent-dark); }
-.glue-feature span { font-size: 13px; color: var(--muted); line-height: 1.7; }
-.glue-icon { font-size: 30px; }
-.glue-reasons { margin-top: 28px; background: #FFF7FA; border: 1.5px dashed #E7A6C2; border-radius: 22px; padding: 22px 24px; }
-.glue-reasons h2 { margin: 0 0 12px; font-family: var(--serif); font-size: 20px; color: var(--accent-dark); }
-.glue-reason { margin-top: 14px; }
-.glue-reason strong { color: var(--accent-dark); }
-.glue-reason p { margin: 4px 0 0; font-size: 15px; line-height: 1.9; }
-.glue-tip { margin: 20px 0 0; text-align: center; color: var(--accent); font-size: 14px; }
-
+.glue-features { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 32px; padding: 20px 0; border-top: 1px solid var(--line-2); border-bottom: 1px solid var(--line-2); }
+.glue-feature { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.glue-feature strong { color: var(--accent-dark); font-size: 14px; }
+.glue-icon { width: 56px; height: 56px; border-radius: 50%; background: var(--pink); display: flex; align-items: center; justify-content: center; font-size: 26px; }
+.glue-title { text-align: center; font-family: var(--serif); font-size: 22px; color: var(--accent-dark); margin: 40px 0 20px; }
+.glue-title::after { content: ""; display: block; width: 40px; height: 2px; background: var(--accent); margin: 10px auto 0; }
+.glue-box { background: #FFF7FA; border: 1px solid var(--line-2); border-radius: 16px; padding: 16px 20px; margin-bottom: 14px; }
+.glue-box h3 { margin: 0 0 6px; font-size: 16px; color: var(--accent-dark); }
+.glue-box p { margin: 0; font-size: 15px; line-height: 1.9; }
+.glue-steps-wrap { background: #FFF7FA; border-radius: 22px; padding: 4px 22px 18px; margin-top: 32px; }
+.glue-specs { width: 100%; border-collapse: collapse; font-size: 15px; }
+.glue-specs th, .glue-specs td { padding: 12px 8px; border-bottom: 1px solid var(--line-2); text-align: left; vertical-align: top; }
+.glue-specs th { width: 96px; color: var(--accent-dark); white-space: nowrap; }
+.glue-footer { margin: 28px 0 0; text-align: center; font-size: 13px; color: var(--muted); display: flex; flex-direction: column; }
+@media (max-width: 560px) { .glue-features { grid-template-columns: repeat(2, 1fr); } }
 /* 尺寸與工藝頁 */
 .guide-page { max-width: 860px; line-height: 1.9; }
 .guide-page p { margin: 0 0 12px; }
