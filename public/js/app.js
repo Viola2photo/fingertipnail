@@ -254,11 +254,11 @@ function Home({ products, loading, query, filter, setFilter }) {
       <div class="size-guide">
         <div>
           <h2>不知道自己的尺寸？</h2>
-          <p style="margin:0;color:#4A3050">用軟尺或紙條量大拇指甲最寬處，對照右邊的尺寸。其他手指的尺寸與測量方法請看完整尺寸表。</p>
+          <p style="margin:0;color:#4A3050">最多人選 <strong>S</strong>，大約 7～8 成的人都適合。右邊是 S 每根手指的寬度，用軟尺或紙條量指甲最寬處，差不多就選 S；偏大或偏小再看完整尺寸表。</p>
           <a href="#/guide" style="display:inline-block;margin-top:8px">完整尺寸表與測量方式 →</a>
         </div>
-        <div class="size-cells">
-          ${SIZES.map((s) => html`<div class="size-cell"><strong>${s}</strong><span class="muted" style="font-size:13px">${GUIDE_PAGE.table[s] ? `拇指 ${GUIDE_PAGE.table[s][0]} mm` : '歡迎私訊詢問'}</span></div>`)}
+        <div class="size-cells size-cells-5" aria-label="S 尺寸（mm）">
+          ${GUIDE_PAGE.fingers.map((f, i) => html`<div class="size-cell"><span class="muted" style="font-size:13px">${f}</span><strong>${GUIDE_PAGE.table.S[i]}</strong><span class="muted" style="font-size:12px">mm</span></div>`)}
         </div>
       </div>
     </section>`;
