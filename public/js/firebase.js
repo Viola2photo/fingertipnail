@@ -1,7 +1,7 @@
 // Firebase（固定版本，避免 CDN 改版影響網站）
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
 import { getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
-import { getFirestore, collection, doc, onSnapshot, query, orderBy, limit } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
+import { getFirestore, collection, onSnapshot, query, orderBy, limit } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
 import { FIREBASE_CONFIG, APP_ID, SHOP_OWNER_UID } from './config.js';
 
 const app = initializeApp(FIREBASE_CONFIG);
@@ -22,10 +22,4 @@ export function watchProducts(cb, onError) {
 export function watchMyOrders(uid, cb, onError) {
   const ref = query(collection(db, 'artifacts', APP_ID, 'users', uid, 'orders'), orderBy('createdAt', 'desc'), limit(30));
   return onSnapshot(ref, (snap) => cb(snap.docs.map((d) => d.data())), onError);
-}
-
-// 後台「網站文字」存的內容（settings/siteText）；讀不到時網站照常用預設文字
-export function watchSiteText(cb) {
-  const ref = doc(db, 'artifacts', APP_ID, 'users', SHOP_OWNER_UID, 'settings', 'siteText');
-  return onSnapshot(ref, (snap) => cb(snap.exists() ? snap.data() : null), () => cb(null));
 }

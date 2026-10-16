@@ -2,8 +2,7 @@
 import { html, render, useState, useEffect, useMemo, useRef, useCallback } from '../vendor/preact-htm.module.js';
 import { SITE, SIZES, SHAPE_GROUPS, MOODS, PRICE_TIERS, ORDER_STATUS } from './config.js';
 import { PAGES, GLUE_PAGE, GUIDE_PAGE } from './pages.js';
-import { auth, watchUser, login, logout, watchProducts, watchMyOrders, watchSiteText } from './firebase.js';
-import { DEFAULT_SITE_TEXT, mergeSiteText } from './site-text.js';
+import { auth, watchUser, login, logout, watchProducts, watchMyOrders } from './firebase.js';
 
 // ---------- 工具 ----------
 const money = (n) => `NT$${Number(n || 0).toLocaleString('zh-TW')}`;
@@ -20,17 +19,6 @@ const validPickupName = (name) => {
 // 果凍膠是加購品，用名稱辨認（關鍵字在 config.js 的 SITE.glueKeyword）
 const isGlue = (p) => Boolean(SITE.glueKeyword) && String(p?.name || '').includes(SITE.glueKeyword);
 const glueSize = (p) => SIZES.find((s) => Number(p?.stock?.[s] || 0) > 0) || '';
-// 後台「網站文字」：整個網站共用一份，後台儲存後開著的頁面也會馬上更新
-let siteText = DEFAULT_SITE_TEXT;
-const siteTextListeners = new Set();
-watchSiteText((saved) => { siteText = mergeSiteText(saved); siteTextListeners.forEach((fn) => fn(siteText)); });
-function useSiteText() {
-  const [text, setText] = useState(siteText);
-  useEffect(() => { siteTextListeners.add(setText); setText(siteText); return () => siteTextListeners.delete(setText); }, []);
-  return text;
-}
-// 後台填的換行要顯示成斷行
-const withBreaks = (s) => String(s).split('\n').flatMap((line, i) => (i ? [html`<br />`, line] : [line]));
 const isInAppBrowser = () => /Line\/|FBAN|FBAV|Instagram/i.test(navigator.userAgent);
 
 function parseRoute() {
@@ -91,9 +79,8 @@ function Photo({ product, alt }) {
 
 // ---------- 頁首／頁尾 ----------
 function Header({ cartCount, onCart, user, query, setQuery }) {
-  const text = useSiteText();
   return html`
-    <div class="announce">${text.announcement}</div>
+    <div class="announce">${SITE.announcement}</div>
     <header class="header">
       <div class="container header-inner">
         <a class="brand" href="#/">
@@ -161,7 +148,6 @@ function InfoPage({ id }) {
 
 // ---------- 首頁 ----------
 function Home({ products, loading, query, filter, setFilter }) {
-  const text = useSiteText();
   const listed = useMemo(() => products.filter((p) => p.status !== 'N' && !isGlue(p)), [products]);
   const newest = useMemo(() => [...listed].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''))), [listed]);
   const newIds = useMemo(() => new Set(newest.slice(0, 12).map((p) => p.docId)), [newest]);
@@ -186,9 +172,9 @@ function Home({ products, loading, query, filter, setFilter }) {
   return html`
     <section class="container hero">
       <div class="hero-text">
-        <div class="script" style="font-size:20px">${text.heroScript}</div>
-        <h1>${withBreaks(text.heroTitle)}</h1>
-        <p>${withBreaks(text.heroText)}</p>
+        <div class="script" style="font-size:20px">Once upon a fingertip</div>
+        <h1>今天，<br />想當哪一位公主？</h1>
+        <p>3 分鐘貼上、隨時卸下。不用預約、不傷真甲，千金、甜妹、清冷仙氣，一週換一種心情也沒有壓力。</p>
         <div class="chips">
           <button class="btn btn-primary" onClick=${() => scrollToId('shop')}>開始挑款</button>
           <button class="btn btn-ghost" onClick=${() => scrollToId('size')}>我該選哪個尺寸？</button>
@@ -267,8 +253,8 @@ function Home({ products, loading, query, filter, setFilter }) {
     <section id="size" class="container">
       <div class="size-guide">
         <div>
-          <h2>${text.sizeTitle}</h2>
-          <p style="margin:0;color:#4A3050">${withBreaks(text.sizeText)}</p>
+          <h2>不知道自己的尺寸？</h2>
+          <p style="margin:0;color:#4A3050">最多人選 <strong>S</strong>，大約 7～8 成的人都適合。右邊是 S 每根手指的寬度，用軟尺或紙條量指甲最寬處，差不多就選 S；偏大或偏小再看完整尺寸表。</p>
           <a href="#/guide" style="display:inline-block;margin-top:8px">完整尺寸表與測量方式 →</a>
         </div>
         <div class="size-cells size-cells-5" aria-label="S 尺寸（mm）">
@@ -297,15 +283,14 @@ function Card({ product: p, isNew }) {
 // ---------- 果凍膠 ----------
 // 款式頁與結帳頁的加購提醒；建檔系統還沒有果凍膠商品時不顯示
 function GlueOffer({ glue, cart, addToCart }) {
-  const text = useSiteText();
   if (!glue || glue.status === 'N') return null;
   const inCart = cart.some((l) => l.id === glue.docId);
   const size = glueSize(glue);
   return html`
     <div class="glue-offer">
       <div class="glue-offer-text">
-        <strong>💎 ${text.glueOfferTitle}</strong>
-        <span>${withBreaks(text.glueOfferText)}</span>
+        <strong>💎 ${GLUE_PAGE.offerTitle}</strong>
+        <span>${GLUE_PAGE.offerText}</span>
         <a href="#/glue">了解果凍膠 →</a>
         <small class="muted">${GLUE_PAGE.bundleNote}</small>
       </div>
