@@ -116,6 +116,8 @@ SENDER_CELLPHONE=09xxxxxxxx
 
 文字頁面（關於我們、退換貨政策）的內容在 `public/js/pages.js`。
 
+首頁公告、大標題、尺寸區塊說明、果凍膠加購提醒可在後台「網站文字」直接改（存在 Firestore `settings/siteText`，欄位清單在 `public/js/site-text.js`）。這份文件要公開可讀，第一次使用前要部署一次資料庫規則：`firebase deploy --only firestore:rules`。
+
 ## 上線檢查
 
 - [ ] 綠界後台更換過 HashKey／HashIV（舊倉庫曾公開過）
