@@ -125,6 +125,7 @@ function Footer() {
         <div style="flex:1 1 200px"><strong>聯絡我們</strong><a href=${`mailto:${SITE.contactEmail}`}>${SITE.contactEmail}</a>
           <div class="footer-links"><a href="#/about">關於我們</a><a href="#/returns">退換貨政策</a></div></div>
       </div>
+      <div class="container" style="font-size:12px;opacity:.8;padding-top:12px">${SITE.antiFraud}</div>
     </footer>`;
 }
 
@@ -688,6 +689,7 @@ function Orders({ user, banner }) {
     <div class="container section" style="max-width:860px">
       <h1 class="serif" style="margin:0 0 20px;font-size:32px">我的訂單</h1>
       ${banner && html`<div class="notice notice-mint" style="margin-bottom:16px">${banner}</div>`}
+      <div class="notice notice-peach" style="margin-bottom:16px;font-size:13px">${SITE.antiFraud}</div>
       ${!user
         ? html`<div class="empty">登入後可以查看訂單進度。<br /><br /><button class="btn btn-primary" onClick=${() => login().catch(() => {})}>使用 Google 登入</button><br /><br />沒有登入就下單的話，訂單狀態請來信 ${SITE.contactEmail} 詢問。</div>`
         : orders === null ? html`<div class="empty">載入中…</div>`
