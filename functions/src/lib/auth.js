@@ -17,12 +17,16 @@ async function verifyUser(req) {
   }
 }
 
+function isAdminUid(uid) {
+  return adminUids().has(uid);
+}
+
 // 不是店家就直接回 401/403，回傳 null；是店家回傳 decoded token
 async function requireAdmin(req, res) {
   const user = await verifyUser(req);
   if (!user) { res.status(401).json({ error: '請先登入' }); return null; }
-  if (!adminUids().has(user.uid)) { res.status(403).json({ error: '這個帳號沒有後台權限' }); return null; }
+  if (!isAdminUid(user.uid)) { res.status(403).json({ error: '這個帳號沒有後台權限' }); return null; }
   return user;
 }
 
-module.exports = { verifyUser, requireAdmin };
+module.exports = { verifyUser, requireAdmin, isAdminUid };

@@ -19,9 +19,12 @@ exports.maintenance = onSchedule({ schedule: 'every 10 minutes', timeZone: 'Asia
   if (log.length) console.log('maintenance', log);
 });
 
-// 建檔系統的「照片識別款式」（Google Vision），沿用原本功能
-exports.analyzeImage = onCall({ memory: '512MiB' }, async (request) => {
+// 建檔系統的「照片識別款式」（Google Vision），沿用原本功能。
+// 顧客也能用 Google 登入，所以要限定店家帳號，避免任何人登入後狂呼叫 Vision 產生費用
+exports.analyzeImage = onCall({ memory: '512MiB', maxInstances: 2 }, async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', '請先登入');
+  const { isAdminUid } = require('./src/lib/auth');
+  if (!isAdminUid(request.auth.uid)) throw new HttpsError('permission-denied', '這個帳號沒有建檔權限');
   const imageBase64 = String(request.data?.imageBase64 || '');
   if (!imageBase64.includes(',')) throw new HttpsError('invalid-argument', '缺少圖片');
   const vision = require('@google-cloud/vision');
