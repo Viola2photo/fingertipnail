@@ -13,6 +13,8 @@ const routes = {
   'POST /api/admin/order': require('./handlers/adminOrder'),
   'POST /api/admin/logistics': require('./handlers/adminLogistics'),
   'GET /api/admin/status': require('./handlers/adminStatus'),
+  'GET /api/line/login': require('./handlers/lineLogin'),
+  'GET /api/line/callback': require('./handlers/lineCallback'),
 };
 
 function routeKey(req) {

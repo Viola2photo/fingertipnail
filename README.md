@@ -84,6 +84,14 @@ SENDER_CELLPHONE=09xxxxxxxx
 
 填完後到後台總覽按「查看設定」，會列出哪些已填、哪些還缺（不會顯示金鑰內容）。
 
+## LINE 登入
+
+1. LINE Developers 建立 LINE Login channel（Web app），Callback URL 填 `https://tiptipart.com/api/line/callback`，OpenID Connect 開啟。
+2. 部署 functions 時 CLI 會詢問 `LINE_CHANNEL_ID`（Channel ID）與 `LINE_CHANNEL_SECRET`（Channel secret，存 Secret Manager）。
+3. Cloud Functions 的服務帳號需要「Service Account Token Creator」角色（發 Firebase 登入憑證用），否則登入會失敗。
+4. 部署完成後把 `public/js/config.js` 的 `SITE.lineLogin` 改成 `true`，網站才會顯示 LINE 登入按鈕。
+LINE 會員的 uid 為 `line:<LINE userId>`；同一人用 Google 與 LINE 登入是兩個不同會員。
+
 ## 測試（綠界測試環境）
 
 1. `ECPAY_ENV` 維持 `stage` 部署。

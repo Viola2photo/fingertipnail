@@ -2,7 +2,7 @@
 import { html, render, useState, useEffect, useMemo, useRef, useCallback } from '../vendor/preact-htm.module.js';
 import { SITE, SIZES, SHAPE_GROUPS, MOODS, PRICE_TIERS, ORDER_STATUS } from './config.js';
 import { PAGES, GLUE_PAGE, GUIDE_PAGE } from './pages.js';
-import { auth, watchUser, login, logout, watchProducts, watchMyOrders } from './firebase.js';
+import { auth, watchUser, login, loginWithLine, loginWithToken, logout, watchProducts, watchMyOrders } from './firebase.js';
 
 // ---------- 工具 ----------
 const money = (n) => `NT$${Number(n || 0).toLocaleString('zh-TW')}`;
@@ -69,6 +69,30 @@ async function postJson(path, body, withAuth) {
   return fetch(path, { method: 'POST', headers, body: JSON.stringify(body) });
 }
 
+// 登入按鈕：LINE（開啟後）與 Google。LINE 內建瀏覽器擋 Google 登入視窗，所以提醒改用 LINE 或外部瀏覽器
+function LoginButtons({ next }) {
+  const [error, setError] = useState('');
+  const google = () => login().catch((e) => { if (e?.code !== 'auth/popup-closed-by-user') setError('Google 登入沒有成功，請再試一次或改用其他瀏覽器。'); });
+  return html`
+    <div class="login-buttons">
+      ${SITE.lineLogin && html`<button type="button" class="btn btn-line" onClick=${() => loginWithLine(next)}>使用 LINE 登入</button>`}
+      <button type="button" class="btn btn-primary" onClick=${google}>使用 Google 登入</button>
+      ${isInAppBrowser() && html`<small class="muted">在 LINE／Facebook／Instagram 內建瀏覽器中 Google 登入可能無法使用${SITE.lineLogin ? '，請改用 LINE 登入' : '，請改用手機的瀏覽器開啟'}。</small>`}
+      ${error && html`<small style="color:#B42318">${error}</small>`}
+    </div>`;
+}
+
+function LoginDialog({ onClose }) {
+  return html`
+    <div class="overlay" onClick=${onClose}></div>
+    <div class="login-dialog" role="dialog" aria-modal="true" aria-label="登入">
+      <h2>登入會員</h2>
+      <p class="muted" style="margin:0;text-align:center;font-size:13px">登入後可查看訂單進度、使用超商取貨付款</p>
+      <${LoginButtons} />
+      <button type="button" class="link-btn" onClick=${onClose}>先不要</button>
+    </div>`;
+}
+
 const NailIcon = ({ size = 40 }) => html`<svg width=${size} height=${size * 1.4} viewBox="0 0 56 80" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M10 78V34C10 16 20 4 28 4s18 12 18 30v44z"></path></svg>`;
 const CartIcon = () => html`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 7h12l-1.2 12.2a2 2 0 0 1-2 1.8H9.2a2 2 0 0 1-2-1.8z"></path><path d="M9 7V6a3 3 0 0 1 6 0v1"></path></svg>`;
 
@@ -80,7 +104,7 @@ function Photo({ product, alt }) {
 }
 
 // ---------- 頁首／頁尾 ----------
-function Header({ cartCount, onCart, user, query, setQuery }) {
+function Header({ cartCount, onCart, onLogin, user, query, setQuery }) {
   return html`
     <div class="announce">${SITE.announcement}</div>
     <header class="header">
@@ -102,8 +126,8 @@ function Header({ cartCount, onCart, user, query, setQuery }) {
           <input id="q" class="search" type="search" placeholder="搜尋：蝴蝶結、貓眼…" value=${query}
             onInput=${(e) => { setQuery(e.target.value); if (parseRoute().name !== 'home') go('/'); }} />
           ${user
-            ? html`<button class="text-btn" onClick=${logout} title=${user.email}>登出</button>`
-            : html`<button class="text-btn" onClick=${() => login().catch(() => {})}>登入</button>`}
+            ? html`<button class="text-btn" onClick=${logout} title=${user.email || user.displayName || ''}>登出</button>`
+            : html`<button class="text-btn" onClick=${onLogin}>登入</button>`}
           <button class="icon-btn" onClick=${onCart} aria-label=${`購物車，${cartCount} 件商品`}>
             <${CartIcon} />${cartCount > 0 && html`<span class="badge">${cartCount}</span>`}
           </button>
@@ -598,9 +622,12 @@ function Checkout({ cart, user, quote, promo, glue, addToCart }) {
   if (!cart.length) return html`<div class="container section"><div class="empty">購物車是空的。<br /><a href="#/">去挑選款式</a></div></div>`;
 
   const storeOk = store && store.subType === method;
+  // 取貨付款需要登入（伺服器也會檢查），防止假單佔住庫存
+  const codNeedsLogin = payment === 'cod' && !user;
   const submit = async (e) => {
     e.preventDefault();
     setError('');
+    if (codNeedsLogin) return setError('超商取貨付款請先登入');
     if (!storeOk) return setError('請先選擇取貨門市');
     if (!validPickupName(form.name)) return setError('姓名請填證件上的姓名：中文 2～5 字，或英文 4～10 個字母');
     setBusy(true);
@@ -658,8 +685,12 @@ function Checkout({ cart, user, quote, promo, glue, addToCart }) {
           <h2>付款方式</h2>
           <div class="options">
             <button type="button" class="option" aria-pressed=${payment === 'online'} onClick=${() => setPayment('online')}><strong>線上付款</strong><span>信用卡、ATM 轉帳、超商代碼</span></button>
-            <button type="button" class="option" aria-pressed=${payment === 'cod'} onClick=${() => setPayment('cod')}><strong>超商取貨付款</strong><span>到門市取貨時再付款</span></button>
+            <button type="button" class="option" aria-pressed=${payment === 'cod'} onClick=${() => setPayment('cod')}><strong>超商取貨付款</strong><span>到門市取貨時再付款（需登入）</span></button>
           </div>
+          ${codNeedsLogin && html`<div class="notice notice-peach" style="margin-top:12px">
+            <p style="margin:0 0 10px">超商取貨付款需要先登入會員，每支手機最多 2 筆尚未取貨的訂單。不想登入可以選「線上付款」。</p>
+            <${LoginButtons} next="#/checkout" />
+          </div>`}
         </section>
       </div>
 
@@ -670,7 +701,7 @@ function Checkout({ cart, user, quote, promo, glue, addToCart }) {
         </div>
         <${Summary} cart=${cart} quote=${quote} />
         ${error && html`<div class="notice notice-pink" role="alert" style="margin-top:12px">${error}</div>`}
-        <button class="btn btn-primary" type="submit" style="width:100%;margin-top:16px" disabled=${busy || !!quote.error || quote.loading}>${payment === 'cod' ? (busy ? '送出訂單中…' : '送出訂單（取貨付款）') : (busy ? '前往綠界付款…' : '前往綠界付款')}</button>
+        <button class="btn btn-primary" type="submit" style="width:100%;margin-top:16px" disabled=${busy || !!quote.error || quote.loading || codNeedsLogin}>${payment === 'cod' ? (busy ? '送出訂單中…' : '送出訂單（取貨付款）') : (busy ? '前往綠界付款…' : '前往綠界付款')}</button>
         <p class="muted" style="font-size:12px;text-align:center;margin:8px 0 0">送出訂單即表示你同意本店的<a href="#/returns" target="_blank">退換貨政策</a></p>
         <p class="muted" style="font-size:12px;margin:10px 0 0">${payment === 'cod' ? '包裹到店後會有簡訊通知，請在期限內到門市付款取貨。' : '付款由綠界科技 ECPay 處理，本站不儲存信用卡資料。'}${!user ? ' 登入後下單可在「我的訂單」查看進度。' : ''}</p>
       </aside>
@@ -691,7 +722,7 @@ function Orders({ user, banner }) {
       ${banner && html`<div class="notice notice-mint" style="margin-bottom:16px">${banner}</div>`}
       <div class="notice notice-peach" style="margin-bottom:16px;font-size:13px">${SITE.antiFraud}</div>
       ${!user
-        ? html`<div class="empty">登入後可以查看訂單進度。<br /><br /><button class="btn btn-primary" onClick=${() => login().catch(() => {})}>使用 Google 登入</button><br /><br />沒有登入就下單的話，訂單狀態請來信 ${SITE.contactEmail} 詢問。</div>`
+        ? html`<div class="empty">登入後可以查看訂單進度。<br /><br /><div style="max-width:280px;margin:0 auto"><${LoginButtons} next="#/orders" /></div><br />沒有登入就下單的話，訂單狀態請來信 ${SITE.contactEmail} 詢問。</div>`
         : orders === null ? html`<div class="empty">載入中…</div>`
         : orders.length === 0 ? html`<div class="empty">還沒有訂單，<a href="#/">去逛逛</a></div>`
         : html`<div style="display:flex;flex-direction:column;gap:16px">${orders.map((o) => {
@@ -729,6 +760,7 @@ function App() {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState({ sort: '' });
   const [banner, setBanner] = useState('');
+  const [loginOpen, setLoginOpen] = useState(false);
 
   const setCart = useCallback((next) => { setCartState(next); saveCart(next); }, []);
   useEffect(() => {
@@ -736,12 +768,24 @@ function App() {
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
-  useEffect(() => watchUser(setUser), []);
+  useEffect(() => watchUser((u) => { setUser(u); if (u) setLoginOpen(false); }), []);
+  // LINE 登入完成：伺服器把登入憑證放在網址 # 後面，讀到就登入（網址已在載入時清掉）
+  useEffect(() => {
+    if (!pendingLineToken) return;
+    loginWithToken(pendingLineToken).catch(() => setBanner('LINE 登入沒有成功，請再試一次。'));
+  }, []);
   useEffect(() => watchProducts((list) => { setProducts(list); setLoading(false); }, () => { setLoadError('商品資料讀取失敗，請重新整理'); setLoading(false); }), []);
 
   // 從綠界付款頁回來（/api/ecpay/result 會帶 ?order=）
   useEffect(() => {
     const params = new URLSearchParams(location.search);
+    const loginResult = params.get('login');
+    if (loginResult) {
+      setBanner(loginResult === 'line_cancelled' ? '已取消 LINE 登入。'
+        : loginResult === 'line_unavailable' ? 'LINE 登入暫時無法使用，請先用 Google 登入。'
+        : 'LINE 登入沒有成功，請再試一次。');
+      history.replaceState(null, '', `${location.pathname}${location.hash}`);
+    }
     const result = params.get('order');
     if (!result) return;
     setBanner(result === 'success'
@@ -773,7 +817,7 @@ function App() {
 
   const count = cart.reduce((s, l) => s + l.qty, 0);
   return html`
-    <${Header} cartCount=${count} onCart=${() => setCartOpen(true)} user=${user} query=${query} setQuery=${setQuery} />
+    <${Header} cartCount=${count} onCart=${() => setCartOpen(true)} onLogin=${() => setLoginOpen(true)} user=${user} query=${query} setQuery=${setQuery} />
     <main>
       ${loadError && html`<div class="container"><div class="notice notice-peach" style="margin-top:16px">${loadError}</div></div>`}
       ${route.name === 'home' && html`<${Home} products=${products} loading=${loading} query=${query} filter=${filter} setFilter=${setFilter} />`}
@@ -785,8 +829,18 @@ function App() {
       ${route.name === 'page' && html`<${InfoPage} id=${route.id} />`}
     </main>
     <${Footer} />
+    ${loginOpen && !user && html`<${LoginDialog} onClose=${() => setLoginOpen(false)} />`}
     ${cartOpen && html`<${CartDrawer} cart=${liveCart} setCart=${setCart} onClose=${() => setCartOpen(false)} promo=${promo} setPromo=${setPromo} quote=${quote} />`}`;
 }
+
+// LINE 登入回來的網址是 #line_token=...&next=#/...，在畫面載入前先取出憑證並換回正常網址
+const pendingLineToken = (() => {
+  if (!location.hash.startsWith('#line_token=')) return '';
+  const params = new URLSearchParams(location.hash.slice(1));
+  const next = /^#\/[A-Za-z0-9/_-]*$/.test(params.get('next') || '') ? params.get('next') : '#/orders';
+  history.replaceState(null, '', `${location.pathname}${next}`);
+  return params.get('line_token') || '';
+})();
 
 const root = document.getElementById('app');
 root.textContent = ''; // 清掉「載入中」文字再掛上程式

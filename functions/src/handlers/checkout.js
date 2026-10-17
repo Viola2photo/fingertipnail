@@ -8,6 +8,14 @@ const { normalizeInvoiceRequest } = require('../lib/invoice');
 const { markOrderPaid } = require('../lib/payment');
 
 const CVS_SUBTYPES = ['UNIMARTC2C', 'FAMIC2C', 'HILIFEC2C', 'OKMARTC2C'];
+// 取貨付款不用先付錢，為了防止假單佔住庫存：必須登入，且同一支手機（或同一個會員）同時最多 2 筆還沒取貨的訂單
+const COD_OPEN_LIMIT = 2;
+const COD_OPEN_STATUSES = ['paid', 'shipping', 'shipped'];
+
+async function openCodOrders(field, value) {
+  const snaps = await ordersRef().where(field, '==', value).limit(100).get();
+  return snaps.docs.map((d) => d.data()).filter((o) => o.payment?.paymentType === 'COD' && COD_OPEN_STATUSES.includes(o.status)).length;
+}
 
 function fail(res, status, message) {
   res.status(status).json({ error: message });
@@ -37,11 +45,16 @@ module.exports = async (req, res) => {
     // 付款方式：online＝綠界線上付款（信用卡／ATM／超商代碼）；cod＝超商取貨付款
     const cod = body.paymentMethod === 'cod';
 
-    const { lines, totals } = await priceCart(body.items, body.promoCode);
-    if (cod && totals.total > 20000) return fail(res, 400, '取貨付款金額上限為 20,000 元，請改用線上付款');
-
     // 有登入就把訂單同步到顧客的「我的訂單」（uid 由伺服器驗證 token 取得，不信任前端）
     const user = await verifyUser(req);
+    if (cod && !user) return fail(res, 401, '超商取貨付款需要先登入（Google 或 LINE）');
+
+    const { lines, totals } = await priceCart(body.items, body.promoCode);
+    if (cod && totals.total > 20000) return fail(res, 400, '取貨付款金額上限為 20,000 元，請改用線上付款');
+    if (cod) {
+      const open = Math.max(await openCodOrders('customerInfo.phone', phone), await openCodOrders('customerUid', user.uid));
+      if (open >= COD_OPEN_LIMIT) return fail(res, 409, `每支手機最多 ${COD_OPEN_LIMIT} 筆尚未取貨的取貨付款訂單，請先取貨後再下單，或改用線上付款`);
+    }
     const merchantTradeNo = ecpay.newMerchantTradeNo('NS');
     const now = new Date().toISOString();
     const order = {
