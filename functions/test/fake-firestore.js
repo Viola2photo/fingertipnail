@@ -57,6 +57,7 @@ function createFakeDb() {
       get: (ref) => ref.get(),
       set: (ref, data, opts) => { ops.push(() => write(ref.path, data, opts)); },
       update: (ref, data) => { ops.push(() => { if (!store.has(ref.path)) throw new Error(`no doc ${ref.path}`); write(ref.path, data, { merge: true }); }); },
+      delete: (ref) => { ops.push(() => store.delete(ref.path)); },
       commit: async () => ops.forEach((op) => op()),
     };
   };

@@ -17,6 +17,10 @@ const fakeFirebase = {
   ordersRef: () => root.collection('orders'),
   stockMovementsRef: () => root.collection('stockMovements'),
   shippingSettingsRef: () => root.collection('settings').doc('shipping'),
+  lineLoginStatesRef: () => db.collection('lineLoginStates'),
+  createCustomToken: async (uid, claims) => `custom:${uid}:${claims.provider}`,
+  upsertAuthUser: async (uid, profile) => { fakeFirebase.authUsers[uid] = profile; },
+  authUsers: {},
   customerOrderRef: (uid, id) => db.collection('artifacts').doc('nail-inventory-app').collection('users').doc(uid).collection('orders').doc(id),
 };
 require.cache[path.resolve(__dirname, '../src/lib/firebase.js')] = { id: 'fake', filename: 'fake', loaded: true, exports: fakeFirebase };
@@ -32,6 +36,7 @@ function mockRes() {
   res.setHeader = (k, v) => { res.headers[k] = v; };
   res.send = (b) => { res.body = b; return res; };
   res.json = (b) => { res.body = b; return res; };
+  res.redirect = (c, url) => { res.statusCode = c; res.location = url; return res; };
   return res;
 }
 const req = (body, headers = {}) => ({ method: 'POST', body, headers: { host: 'shop.example.com', ...headers }, query: {} });
@@ -242,7 +247,7 @@ test('收件人姓名需符合超商規定（中文 2～5 字或英文 4～10 �
 let codNo;
 test('超商取貨付款：不經綠界付款頁，訂單直接成立並扣庫存，但還不算收款', async () => {
   const res = mockRes();
-  await checkout(req({ items: [{ id: 'NAIL_0003', size: 'M', quantity: 1 }], name: 'Viola Chang', phone: '0912345678', store: STORE, paymentMethod: 'cod' }), res);
+  await checkout(req({ items: [{ id: 'NAIL_0003', size: 'M', quantity: 1 }], name: 'Viola Chang', phone: '0912345678', store: STORE, paymentMethod: 'cod' }, { authorization: 'Bearer buyer-token' }), res);
   assert.strictEqual(res.statusCode, 200, JSON.stringify(res.body));
   assert.strictEqual(res.body.cod, true);
   assert.strictEqual(res.body.action, undefined);
@@ -294,7 +299,7 @@ test('物流通知：顧客已取貨（2067）→ 訂單完成，取貨付款記
 
 test('後台可修改不合規的收件人姓名；建立物流單後就不能改', async () => {
   const res = mockRes();
-  await checkout(req({ items: [{ id: 'NAIL_0003', size: 'M', quantity: 1 }], name: '王小美', phone: '0912345678', store: STORE, paymentMethod: 'cod' }), res);
+  await checkout(req({ items: [{ id: 'NAIL_0003', size: 'M', quantity: 1 }], name: '王小美', phone: '0912345678', store: STORE, paymentMethod: 'cod' }, { authorization: 'Bearer buyer-token' }), res);
   const no = res.body.orderNo;
   const bad = mockRes();
   await adminOrder(req({ action: 'receiver', orderId: no, name: 'A' }, admin), bad);
@@ -306,4 +311,86 @@ test('後台可修改不合規的收件人姓名；建立物流單後就不能�
   const locked = mockRes();
   await adminOrder(req({ action: 'receiver', orderId: codNo, name: '王美美' }, admin), locked);
   assert.match(locked.body.error, /已建立物流單/);
+});
+
+test('取貨付款：沒登入不能下單；同一支手機同時最多 2 筆未取貨', async () => {
+  const body = (phone) => ({ items: [{ id: 'NAIL_0001', size: 'S', quantity: 1 }], name: '王小美', phone, store: STORE, paymentMethod: 'cod' });
+  const anon = mockRes();
+  await checkout(req(body('0922000111')), anon);
+  assert.strictEqual(anon.statusCode, 401);
+  assert.match(anon.body.error, /先登入/);
+
+  await fakeFirebase.inventoryRef().doc('NAIL_0001').set({ id: 'NAIL_0001', name: '焦糖緞帶', price: 490, stock: { S: 10 } });
+  const admin2 = { authorization: 'Bearer admin-token' };
+  for (let i = 0; i < 2; i += 1) {
+    const ok = mockRes();
+    await checkout(req(body('0922000111'), admin2), ok);
+    assert.strictEqual(ok.statusCode, 200, JSON.stringify(ok.body));
+  }
+  const third = mockRes();
+  await checkout(req(body('0922000111'), admin2), third);
+  assert.strictEqual(third.statusCode, 409);
+  assert.match(third.body.error, /最多 2 筆/);
+
+  // 線上付款不受限制
+  const online = mockRes();
+  await checkout(req({ ...body('0922000111'), paymentMethod: 'online' }, admin2), online);
+  assert.strictEqual(online.statusCode, 200, JSON.stringify(online.body));
+});
+
+const lineLogin = require('../src/handlers/lineLogin');
+const lineCallback = require('../src/handlers/lineCallback');
+const getReq = (query) => ({ method: 'GET', query, headers: { host: 'shop.example.com' } });
+
+test('LINE 登入：未設定 channel 時導回並提示', async () => {
+  const res = mockRes();
+  await lineLogin(getReq({}), res);
+  assert.strictEqual(res.location, 'https://shop.example.com/?login=line_unavailable#/orders');
+});
+
+test('LINE 登入：state 只能用一次，驗證通過後發登入憑證', async () => {
+  process.env.LINE_CHANNEL_ID = '1234567890';
+  process.env.LINE_CHANNEL_SECRET = 'secret';
+  const realFetch = global.fetch;
+  const calls = [];
+  global.fetch = async (url, opts) => {
+    const sent = Object.fromEntries(new URLSearchParams(opts.body));
+    calls.push({ url, sent });
+    const data = url.endsWith('/token') ? { id_token: 'IDT' } : { sub: 'U123', name: '小美', picture: 'https://profile.line-scdn.net/x', nonce: sent.nonce };
+    return { ok: true, json: async () => data };
+  };
+  try {
+    const start = mockRes();
+    await lineLogin(getReq({ next: '#/checkout' }), start);
+    const auth = new URL(start.location);
+    assert.strictEqual(auth.origin + auth.pathname, 'https://access.line.me/oauth2/v2.1/authorize');
+    assert.strictEqual(auth.searchParams.get('redirect_uri'), 'https://shop.example.com/api/line/callback');
+    const state = auth.searchParams.get('state');
+
+    const forged = mockRes();
+    await lineCallback(getReq({ code: 'C', state: 'f'.repeat(48) }), forged);
+    assert.match(forged.location, /login=line_failed/);
+
+    const res = mockRes();
+    await lineCallback(getReq({ code: 'C', state }), res);
+    assert.strictEqual(res.location, `https://shop.example.com/#line_token=${encodeURIComponent('custom:line:U123:line')}&next=${encodeURIComponent('#/checkout')}`);
+    assert.strictEqual(calls[0].sent.client_secret, 'secret');
+    assert.strictEqual(calls[1].sent.nonce, auth.searchParams.get('nonce'));
+    assert.strictEqual(fakeFirebase.authUsers['line:U123'].displayName, '小美');
+
+    const replay = mockRes();
+    await lineCallback(getReq({ code: 'C', state }), replay);
+    assert.match(replay.location, /login=line_failed/);
+  } finally {
+    global.fetch = realFetch;
+    delete process.env.LINE_CHANNEL_ID;
+    delete process.env.LINE_CHANNEL_SECRET;
+  }
+});
+
+test('LINE 登入：next 只接受站內路徑', () => {
+  const { safeNext } = require('../src/lib/line');
+  assert.strictEqual(safeNext('#/checkout'), '#/checkout');
+  assert.strictEqual(safeNext('https://evil.example'), '#/orders');
+  assert.strictEqual(safeNext('#/x?a=<script>'), '#/orders');
 });

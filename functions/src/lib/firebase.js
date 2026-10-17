@@ -20,6 +20,18 @@ if (!getApps().length) {
 
 const db = getFirestore();
 const verifyIdToken = (token) => getAuth().verifyIdToken(token);
+// LINE 登入：伺服器確認身分後發給瀏覽器的一次性登入憑證（需要服務帳號有「Service Account Token Creator」權限）
+const createCustomToken = (uid, claims) => getAuth().createCustomToken(uid, claims);
+// 建立或更新會員的顯示名稱與頭像，讓後台與「我的訂單」看得到名字
+async function upsertAuthUser(uid, profile) {
+  const auth = getAuth();
+  try {
+    await auth.updateUser(uid, profile);
+  } catch (e) {
+    if (e.code !== 'auth/user-not-found') throw e;
+    await auth.createUser({ uid, ...profile });
+  }
+}
 const APP_ID = 'nail-inventory-app';
 const ADMIN_USER_ID = process.env.ADMIN_USER_ID || 'MvkJo5e1kEcBS0fGGMr4RKdQjYg1';
 
@@ -31,8 +43,10 @@ const ordersRef = () => shopRoot().collection('orders');
 const stockMovementsRef = () => shopRoot().collection('stockMovements');
 // 後台「出貨設定」（寄件人姓名、手機），店家在後台直接修改
 const shippingSettingsRef = () => shopRoot().collection('settings').doc('shipping');
+// LINE 登入進行中的暫存（防止偽造的登入回呼），只有伺服器讀寫，網頁規則一律拒絕
+const lineLoginStatesRef = () => db.collection('lineLoginStates');
 // 顧客「我的訂單」看的副本
 const customerOrderRef = (uid, orderId) =>
   db.collection('artifacts').doc(APP_ID).collection('users').doc(uid).collection('orders').doc(orderId);
 
-module.exports = { FieldValue, verifyIdToken, db, APP_ID, ADMIN_USER_ID, inventoryRef, ordersRef, stockMovementsRef, shippingSettingsRef, customerOrderRef };
+module.exports = { FieldValue, verifyIdToken, createCustomToken, upsertAuthUser, lineLoginStatesRef, db, APP_ID, ADMIN_USER_ID, inventoryRef, ordersRef, stockMovementsRef, shippingSettingsRef, customerOrderRef };

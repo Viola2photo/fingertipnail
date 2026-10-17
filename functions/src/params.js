@@ -10,6 +10,8 @@ const secrets = {
   ECPAY_LOGISTICS_HASH_IV: defineSecret('ECPAY_LOGISTICS_HASH_IV'),
   ECPAY_INVOICE_HASH_KEY: defineSecret('ECPAY_INVOICE_HASH_KEY'),
   ECPAY_INVOICE_HASH_IV: defineSecret('ECPAY_INVOICE_HASH_IV'),
+  // LINE Developers → LINE Login channel → Basic settings 的 Channel secret（未申請請填 -）
+  LINE_CHANNEL_SECRET: defineSecret('LINE_CHANNEL_SECRET'),
 };
 
 const strings = {
@@ -27,6 +29,7 @@ const strings = {
     default: '-',
     description: '綠界伺服器通知要打的網址；填 - 會自動使用 Cloud Functions 直連網址（避開 CDN，綠界建議）',
   }),
+  LINE_CHANNEL_ID: defineString('LINE_CHANNEL_ID', { default: '-', description: 'LINE Login channel 的 Channel ID（數字；未申請請填 -）' }),
   ADMIN_UIDS: defineString('ADMIN_UIDS', { default: '-', description: '額外的後台帳號 UID，以逗號分隔' }),
 };
 
