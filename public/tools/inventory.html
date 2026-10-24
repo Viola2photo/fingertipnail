@@ -138,6 +138,214 @@
       );
     };
 
+    // ========== 批次修改價格與各尺寸庫存 ==========
+    const SIZES = ['XS', 'S', 'M', 'L'];
+    const toCount = (v) => Math.max(0, parseInt(v, 10) || 0);
+
+    // 把畫面上的修改整理成「要寫回資料庫的變更」；沒有實際改變的款式不列入
+    const collectBatchChanges = (items, edits) => items.flatMap(item => {
+      const e = edits[item.docId];
+      if (!e) return [];
+      const change = { item, price: null, stock: {} };
+      if (e.price !== undefined && e.price !== '' && Number(e.price) > 0 && Number(e.price) !== Number(item.price)) change.price = Number(e.price);
+      SIZES.forEach(s => {
+        if (e.stock?.[s] === undefined || e.stock[s] === '') return;
+        const after = toCount(e.stock[s]);
+        if (after !== Number(item.stock?.[s] || 0)) change.stock[s] = after;
+      });
+      return change.price !== null || Object.keys(change.stock).length ? [change] : [];
+    });
+
+    const BatchEditor = ({ items, allItems, onClose, showToast }) => {
+      const [edits, setEdits] = useState({});
+      const [selected, setSelected] = useState({});
+      const [bulkPrice, setBulkPrice] = useState('');
+      const [bulkSize, setBulkSize] = useState('ALL');
+      const [bulkMode, setBulkMode] = useState('set');
+      const [bulkQty, setBulkQty] = useState('');
+      const [saving, setSaving] = useState(false);
+
+      const shopRoot = db.collection('artifacts').doc(appId).collection('users').doc(adminUserId);
+      const selectedItems = items.filter(i => selected[i.docId]);
+      const allSelected = items.length > 0 && selectedItems.length === items.length;
+      // 用全部款式計算，切換甲型分類時，其他分類改過的也會一起儲存
+      const changes = useMemo(() => collectBatchChanges(allItems, edits), [allItems, edits]);
+
+      const priceOf = (item) => edits[item.docId]?.price ?? (item.price || '');
+      const stockOf = (item, s) => edits[item.docId]?.stock?.[s] ?? (item.stock?.[s] || 0);
+      const isChanged = (item, field, s) => {
+        const c = changes.find(x => x.item.docId === item.docId);
+        if (!c) return false;
+        return field === 'price' ? c.price !== null : c.stock[s] !== undefined;
+      };
+      const setPrice = (item, value) => setEdits(prev => ({ ...prev, [item.docId]: { ...prev[item.docId], price: value } }));
+      const setStock = (item, s, value) => setEdits(prev => ({ ...prev, [item.docId]: { ...prev[item.docId], stock: { ...prev[item.docId]?.stock, [s]: value } } }));
+
+      const toggleAll = () => setSelected(allSelected ? {} : Object.fromEntries(items.map(i => [i.docId, true])));
+
+      const applyBulkPrice = () => {
+        const price = Number(bulkPrice);
+        if (!(price > 0)) return showToast('請輸入正確的價格', 'error');
+        if (!selectedItems.length) return showToast('請先勾選要修改的款式', 'error');
+        setEdits(prev => {
+          const next = { ...prev };
+          selectedItems.forEach(i => { next[i.docId] = { ...next[i.docId], price }; });
+          return next;
+        });
+        showToast(`已把 ${selectedItems.length} 款的價格改為 NT$${price}（尚未儲存）`, 'info');
+      };
+
+      const applyBulkStock = () => {
+        if (bulkQty === '' || isNaN(Number(bulkQty))) return showToast('請輸入數量', 'error');
+        if (!selectedItems.length) return showToast('請先勾選要修改的款式', 'error');
+        const qty = toCount(bulkQty);
+        const sizes = bulkSize === 'ALL' ? SIZES : [bulkSize];
+        setEdits(prev => {
+          const next = { ...prev };
+          selectedItems.forEach(i => {
+            const stock = { ...next[i.docId]?.stock };
+            sizes.forEach(s => {
+              const current = toCount(stock[s] ?? i.stock?.[s]);
+              stock[s] = bulkMode === 'set' ? qty : bulkMode === 'add' ? current + qty : Math.max(0, current - qty);
+            });
+            next[i.docId] = { ...next[i.docId], stock };
+          });
+          return next;
+        });
+        const sizeText = bulkSize === 'ALL' ? '全部尺寸' : bulkSize;
+        const modeText = bulkMode === 'set' ? `設為 ${qty}` : bulkMode === 'add' ? `增加 ${qty}` : `減少 ${qty}`;
+        showToast(`已把 ${selectedItems.length} 款的 ${sizeText} 庫存${modeText}（尚未儲存）`, 'info');
+      };
+
+      const handleSave = async () => {
+        if (!changes.length) return showToast('沒有任何變更', 'error');
+        if (!confirm(`確定要儲存 ${changes.length} 款的變更嗎？`)) return;
+        setSaving(true);
+        try {
+          const now = new Date().toISOString();
+          const by = auth.currentUser?.email || auth.currentUser?.uid || '';
+          // 每款最多 5 筆寫入（商品＋4 個尺寸的異動紀錄），一次交易最多 500 筆，所以 80 款一組
+          for (let i = 0; i < changes.length; i += 80) {
+            const group = changes.slice(i, i + 80);
+            await db.runTransaction(async (tx) => {
+              const refs = group.map(c => shopRoot.collection('inventory').doc(c.item.docId));
+              const snaps = await Promise.all(refs.map(ref => tx.get(ref)));
+              group.forEach((c, idx) => {
+                if (!snaps[idx].exists) return;
+                const data = snaps[idx].data();
+                const stock = { ...(data.stock || {}) };
+                const patch = {};
+                Object.entries(c.stock).forEach(([s, after]) => {
+                  const before = Number(stock[s] || 0);
+                  if (before === after) return;
+                  stock[s] = after;
+                  tx.set(shopRoot.collection('stockMovements').doc(), { type: 'adjust', productId: c.item.docId, name: data.name || '', size: s, quantity: after - before, before, after, unitCost: null, at: now, note: '批次修改', by });
+                });
+                if (Object.keys(c.stock).length) patch.stock = stock;
+                if (c.price !== null) patch.price = c.price;
+                if (Object.keys(patch).length) tx.update(refs[idx], patch);
+              });
+            });
+          }
+          showToast(`已儲存 ${changes.length} 款的變更`, 'success');
+          setEdits({});
+          setSelected({});
+        } catch (error) {
+          console.error(error);
+          showToast('儲存失敗，請重試', 'error');
+        } finally {
+          setSaving(false);
+        }
+      };
+
+      const handleClose = () => {
+        if (changes.length && !confirm('還有修改沒有儲存，確定要離開嗎？')) return;
+        onClose();
+      };
+
+      const cellClass = (changed) => `w-full text-center py-2 rounded-xl font-black text-sm outline-none border ${changed ? 'bg-yellow-50 border-yellow-300 text-yellow-800' : 'bg-gray-50 border-transparent focus:border-blue-200'}`;
+
+      return (
+        <div className="pb-40 md:pb-24">
+          <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-gray-100 mb-4 space-y-4">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <h2 className="font-black text-base">✏️ 批次修改價格／庫存</h2>
+                <p className="text-xs text-gray-400 font-bold mt-1">可直接在下方每一款改數字，或勾選多款後一次套用。改過的格子會變黃色，按「儲存」才會更新到網站。</p>
+              </div>
+              <button onClick={handleClose} className="flex-shrink-0 bg-gray-100 text-gray-600 px-4 py-2 rounded-full font-black text-xs hover:bg-gray-200">離開</button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="bg-gray-50 p-4 rounded-2xl min-w-0">
+                <p className="text-xs font-black text-gray-500 mb-2">💰 已勾選的款式：價格改為</p>
+                <div className="flex gap-2">
+                  <input type="number" min="1" inputMode="numeric" placeholder="例如 390" value={bulkPrice} onChange={e => setBulkPrice(e.target.value)} className="flex-1 min-w-0 bg-white p-3 rounded-xl font-black text-sm outline-none border border-gray-200 focus:border-blue-300" />
+                  <button onClick={applyBulkPrice} className="bg-gray-900 text-white px-4 rounded-xl font-black text-xs whitespace-nowrap hover:bg-black">套用</button>
+                </div>
+              </div>
+              <div className="bg-gray-50 p-4 rounded-2xl min-w-0">
+                <p className="text-xs font-black text-gray-500 mb-2">📦 已勾選的款式：庫存</p>
+                <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2">
+                  <select aria-label="尺寸" value={bulkSize} onChange={e => setBulkSize(e.target.value)} className="min-w-0 bg-white px-1 py-3 rounded-xl font-black text-sm border border-gray-200">
+                    <option value="ALL">全部尺寸</option>
+                    {SIZES.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <select aria-label="方式" value={bulkMode} onChange={e => setBulkMode(e.target.value)} className="min-w-0 bg-white px-1 py-3 rounded-xl font-black text-sm border border-gray-200">
+                    <option value="set">設為</option>
+                    <option value="add">增加</option>
+                    <option value="sub">減少</option>
+                  </select>
+                  <input type="number" min="0" inputMode="numeric" placeholder="數量" value={bulkQty} onChange={e => setBulkQty(e.target.value)} className="min-w-0 bg-white p-3 rounded-xl font-black text-sm outline-none border border-gray-200 focus:border-blue-300" />
+                  <button onClick={applyBulkStock} className="bg-gray-900 text-white px-4 rounded-xl font-black text-xs whitespace-nowrap hover:bg-black">套用</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden">
+            <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 bg-gray-50">
+              <label className="flex items-center gap-2 text-xs font-black text-gray-600 cursor-pointer">
+                <input type="checkbox" checked={allSelected} onChange={toggleAll} className="w-5 h-5 accent-blue-600" />
+                全選（{selectedItems.length}/{items.length}）
+              </label>
+              <div className="ml-auto hidden md:grid grid-cols-5 gap-2 w-[22rem] text-[10px] font-black text-gray-400 text-center">
+                <span>價格</span>{SIZES.map(s => <span key={s}>{s}</span>)}
+              </div>
+            </div>
+            {items.map(item => (
+              <div key={item.docId} className={`flex flex-col md:flex-row md:items-center gap-3 px-4 py-3 border-b border-gray-50 ${selected[item.docId] ? 'bg-blue-50/50' : ''}`}>
+                <label className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer">
+                  <input type="checkbox" checked={!!selected[item.docId]} onChange={() => setSelected(prev => ({ ...prev, [item.docId]: !prev[item.docId] }))} className="w-5 h-5 accent-blue-600 flex-shrink-0" />
+                  {item.media?.[0] ? <img src={item.media[0].url} className="w-12 h-12 rounded-xl object-cover flex-shrink-0" /> : <div className="w-12 h-12 rounded-xl bg-gray-100 flex-shrink-0" />}
+                  <div className="min-w-0">
+                    <p className="font-black text-sm truncate">{item.name || '未命名'}</p>
+                    <p className="text-[10px] font-black text-gray-400">{item.id}{item.shape ? ` ・ ${item.shape}` : ''}</p>
+                  </div>
+                </label>
+                <div className="grid grid-cols-5 gap-2 md:w-[22rem] flex-shrink-0">
+                  {['價格', ...SIZES].map(t => <span key={t} className="text-[10px] font-black text-gray-400 text-center md:hidden">{t}</span>)}
+                  <input type="number" min="1" inputMode="numeric" aria-label={`${item.name} 價格`} value={priceOf(item)} onChange={e => setPrice(item, e.target.value)} className={cellClass(isChanged(item, 'price'))} />
+                  {SIZES.map(s => (
+                    <input key={s} type="number" min="0" inputMode="numeric" aria-label={`${item.name} ${s} 庫存`} value={stockOf(item, s)} onChange={e => setStock(item, s, e.target.value)} className={cellClass(isChanged(item, 'stock', s))} />
+                  ))}
+                </div>
+              </div>
+            ))}
+            {items.length === 0 && <p className="py-16 text-center font-black text-gray-400">此分類目前沒有款式</p>}
+          </div>
+
+          <div className="fixed left-0 right-0 bottom-20 md:bottom-0 z-30 px-4 pb-4 pointer-events-none">
+            <div className="max-w-2xl mx-auto bg-gray-900 text-white rounded-2xl shadow-2xl p-3 flex items-center gap-3 pointer-events-auto">
+              <span className="flex-1 text-xs font-black pl-2">{changes.length ? `${changes.length} 款有修改，尚未儲存` : '目前沒有修改'}</span>
+              {changes.length > 0 && <button onClick={() => setEdits({})} disabled={saving} className="text-xs font-black text-gray-300 hover:text-white px-3 py-2">全部還原</button>}
+              <button onClick={handleSave} disabled={saving || !changes.length} className="bg-green-500 disabled:bg-gray-600 text-white px-5 py-3 rounded-xl font-black text-sm hover:bg-green-600">{saving ? '儲存中…' : '💾 儲存'}</button>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
     function App() {
       const [activeTab, setActiveTab] = useState('inventory');
       const [inventory, setInventory] = useState([]);
@@ -154,6 +362,7 @@
       
       // 款式庫分類過濾
       const [inventoryShapeFilter, setInventoryShapeFilter] = useState('All');
+      const [batchMode, setBatchMode] = useState(false);
       
       // 匯出報表相關狀態
       const [showExportModal, setShowExportModal] = useState(false);
@@ -628,6 +837,12 @@
                     </div>
                     <div className="flex gap-2">
                       <button 
+                        onClick={() => setBatchMode(true)} 
+                        className="flex-shrink-0 bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-600 hover:text-white px-3 py-2 rounded-full font-black text-xs shadow-sm transition-all whitespace-nowrap"
+                      >
+                        ✏️ 批次修改
+                      </button>
+                      <button 
                         onClick={async () => {
                           showToast("正在更新特徵，請稍候...", "info");
                           try {
@@ -671,6 +886,8 @@
                       <div className="text-4xl mb-4">⌛</div>
                       <p className="font-black text-gray-300">正在獲取雲端庫存資料...</p>
                     </div>
+                  ) : batchMode ? (
+                    <BatchEditor items={displayInventory} allItems={inventory} onClose={() => setBatchMode(false)} showToast={showToast} />
                   ) : (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
                       {displayInventory.map(item => (
