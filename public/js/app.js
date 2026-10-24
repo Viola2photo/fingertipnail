@@ -148,7 +148,7 @@ function Footer() {
           讓每一次打扮都沒有負擔，隨時換上最新流行。
         </div>
         <div style="flex:1 1 200px"><strong>付款方式</strong>綠界 ECPay：信用卡、ATM 轉帳、超商代碼；超商取貨付款</div>
-        <div style="flex:1 1 200px"><strong>配送方式</strong>7-ELEVEN／全家 超商取貨<br />滿 ${money(SITE.freeShippingThreshold)} 免運，未滿運費 ${money(SITE.shippingFee)}</div>
+        <div style="flex:1 1 200px"><strong>配送方式</strong>7-ELEVEN／全家 超商取貨<br />${SITE.openingSale?.freeShipping ? '開幕期間全館免運' : `滿 ${money(SITE.freeShippingThreshold)} 免運，未滿運費 ${money(SITE.shippingFee)}`}</div>
         <div style="flex:1 1 200px"><strong>聯絡我們</strong><a href=${`mailto:${SITE.contactEmail}`}>${SITE.contactEmail}</a>
           <div class="footer-links"><a href="#/about">關於我們</a><a href="#/returns">退換貨政策</a></div></div>
       </div>
@@ -596,6 +596,7 @@ function Summary({ cart, quote }) {
     <div style="display:flex;flex-direction:column;gap:6px">
       <div class="sum-row"><span>商品小計</span><span>${money(t?.subtotal ?? subtotal)}</span></div>
       ${t?.eventDiscount > 0 && html`<div class="sum-row"><span>任選 4 件 NT$1,000</span><span>−${money(t.eventDiscount)}</span></div>`}
+      ${t?.saleDiscount > 0 && html`<div class="sum-row"><span>${t.sale?.name}</span><span>−${money(t.saleDiscount)}</span></div>`}
       ${t?.promoDiscount > 0 && html`<div class="sum-row"><span>${t.promo?.name}</span><span>−${money(t.promoDiscount)}</span></div>`}
       <div class="sum-row"><span>運費</span><span>${t ? (t.shippingFee ? money(t.shippingFee) : '免運') : '—'}</span></div>
       <div class="sum-total"><span>結帳金額</span><span class="price">${quote.loading ? '計算中…' : t ? money(t.total) : '—'}</span></div>
@@ -630,11 +631,11 @@ function CartDrawer({ cart, setCart, onClose, promo, setPromo, quote }) {
       </div>
       ${cart.length > 0 && html`
         <div class="drawer-foot">
-          <form class="promo" onSubmit=${(e) => { e.preventDefault(); setPromo(code.trim()); }}>
+          ${(!SITE.openingSale || SITE.openingSale.allowPromoCodes) && html`<form class="promo" onSubmit=${(e) => { e.preventDefault(); setPromo(code.trim()); }}>
             <label class="sr-only" for="promo">優惠碼</label>
             <input id="promo" class="search" style="width:auto;flex:1;max-width:none" placeholder="優惠碼" value=${code} onInput=${(e) => setCode(e.target.value)} />
             <button class="text-btn" type="submit">套用</button>
-          </form>
+          </form>`}
           ${quote.promoInvalid && html`<div class="notice notice-peach">優惠碼無效或已過期</div>`}
           <${Summary} cart=${cart} quote=${quote} />
           <button class="btn btn-primary" disabled=${!!quote.error} onClick=${() => { onClose(); go('/checkout'); }}>前往結帳</button>

@@ -30,7 +30,7 @@ function normalizeInvoiceRequest(raw, phone) {
 // 所有 ItemAmount 加總必須等於 SalesAmount（guides/04 §Items）。
 function buildItems(order) {
   const t = order.totals || {};
-  const discount = Number(t.eventDiscount || 0) + Number(t.promoDiscount || 0);
+  const discount = Number(t.eventDiscount || 0) + Number(t.saleDiscount || 0) + Number(t.promoDiscount || 0);
   const items = [];
   if (discount > 0) {
     const goods = Number(t.subtotal || 0) - discount;

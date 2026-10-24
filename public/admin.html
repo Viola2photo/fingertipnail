@@ -857,6 +857,7 @@
               <div className="bg-[#F8F3F6] rounded-xl p-3 space-y-1">
                 <div className="flex justify-between"><span>小計</span><span>{money(t.subtotal)}</span></div>
                 {t.eventDiscount > 0 && <div className="flex justify-between"><span>任 4 件 1000</span><span>−{money(t.eventDiscount)}</span></div>}
+                {t.saleDiscount > 0 && <div className="flex justify-between"><span>{t.sale?.name}</span><span>−{money(t.saleDiscount)}</span></div>}
                 {t.promoDiscount > 0 && <div className="flex justify-between"><span>{t.promo?.name}</span><span>−{money(t.promoDiscount)}</span></div>}
                 <div className="flex justify-between"><span>運費</span><span>{money(t.shippingFee)}</span></div>
                 <div className="flex justify-between font-bold text-base pt-1"><span>合計</span><span>{money(order.totalAmount)}</span></div>

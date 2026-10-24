@@ -88,6 +88,7 @@ module.exports = async (req, res) => {
     const callback = ecpay.callbackBase(req);
     const itemName = lines.map((l) => `${l.name}(${l.size}) x ${l.quantity}`);
     if (totals.eventDiscount > 0) itemName.push('任4件1000折抵 x 1');
+    if (totals.saleDiscount > 0) itemName.push(`${totals.sale.name}折抵 x 1`);
     if (totals.promoDiscount > 0) itemName.push(`${totals.promo.name}折抵 x 1`);
     if (totals.shippingFee > 0) itemName.push('物流運費 x 1');
 

@@ -4,6 +4,8 @@ const assert = require('node:assert');
 const path = require('node:path');
 const { createFakeDb, fieldValue } = require('./fake-firestore');
 const ecpay = require('../src/lib/ecpay');
+// 這裡測的是基本金額規則（運費、任 4 件），開幕活動另外在 pricing.test.js 測
+require('../src/lib/pricing').OPENING_SALE.enabled = false;
 
 const db = createFakeDb();
 const root = db.collection('artifacts').doc('nail-inventory-app').collection('users').doc('ADMIN');
