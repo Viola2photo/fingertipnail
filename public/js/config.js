@@ -48,6 +48,19 @@ export const MOODS = [
   { key: 'edgy', label: '甜酷黑粉', hint: '波點', chip: 'chip-white', words: ['黑', '甜酷', '波點', '歌德', '暗黑', '豹紋', 'Y2K'] },
 ];
 
+// 首頁輪播廣告：圖片放在 public/img/ads/（ad-N.webp 大圖、ad-N-s.webp 手機用小圖），
+// 點廣告會篩選 shapes 裡的甲型。要換圖或換順序改這裡就好。
+export const HERO_ADS = [
+  { img: 'img/ads/ad-1', shapes: ['長橢圓'] },
+  { img: 'img/ads/ad-2', shapes: ['細狗尖'] },
+  { img: 'img/ads/ad-3', shapes: ['短梯'] },
+  { img: 'img/ads/ad-4', shapes: ['中梯'] },
+  { img: 'img/ads/ad-5', shapes: ['長梯', '超長梯'] },
+  { img: 'img/ads/ad-6', shapes: ['短橢圓'] },
+  { img: 'img/ads/ad-7', shapes: ['杏仁甲'] },
+  { img: 'img/ads/ad-8', shapes: ['中橢圓'] },
+];
+
 export const PRICE_TIERS = [300, 390, 450, 490, 590];
 
 export const ORDER_STATUS = {

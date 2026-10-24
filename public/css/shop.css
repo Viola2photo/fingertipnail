@@ -73,6 +73,31 @@ button { cursor: pointer; }
 .chips { display: flex; flex-wrap: wrap; gap: 10px; }
 
 /* 首頁主視覺 */
+/* 首頁輪播廣告 */
+.hero-ads { position: relative; padding: 36px 0 8px; overflow: hidden; }
+.ads-stage { position: relative; width: 100%; max-width: 1240px; margin: 0 auto; aspect-ratio: 1240 / 530; perspective: 1400px; }
+.ads-stage .ad { position: absolute; top: 0; left: 50%; width: 62%; margin-left: -31%; aspect-ratio: 3 / 2; padding: 0; border: 0; background: none; cursor: pointer;
+  transition: transform .9s cubic-bezier(.22,.8,.3,1), opacity .9s ease, filter .9s ease; transform-style: preserve-3d; }
+.ads-stage .ad-on { transform: translateX(0) scale(1); z-index: 3; }
+.ads-stage .ad-prev { transform: translateX(-62%) scale(.78) rotateY(18deg); z-index: 2; opacity: .75; filter: saturate(.8) brightness(1.04); }
+.ads-stage .ad-next { transform: translateX(62%) scale(.78) rotateY(-18deg); z-index: 2; opacity: .75; filter: saturate(.8) brightness(1.04); }
+.ads-stage .ad-off { transform: translateX(0) scale(.6); z-index: 1; opacity: 0; pointer-events: none; }
+.ad-float { display: block; width: 100%; height: 100%; border-radius: 28px; overflow: hidden; box-shadow: 0 18px 40px -18px rgba(126, 31, 69, .35); }
+.ad-float img { width: 100%; height: 100%; object-fit: cover; }
+.ad-on .ad-float { animation: ad-float 5s ease-in-out infinite; box-shadow: 0 28px 50px -20px rgba(126, 31, 69, .45), 0 0 0 1.5px #E7A6C2; }
+@keyframes ad-float { 0%, 100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-10px) rotate(-.6deg); } }
+.ads-stage .ad:focus-visible { outline: none; }
+.ads-stage .ad:focus-visible .ad-float { box-shadow: 0 0 0 4px var(--accent); }
+.ads-nav { display: flex; justify-content: center; align-items: center; gap: 14px; margin-top: 14px; }
+.ads-arrow { width: 36px; height: 36px; border-radius: 50%; border: 1.5px solid var(--line-2); background: #fff; color: var(--accent); font-size: 22px; line-height: 1; cursor: pointer; }
+.ads-dots { display: flex; gap: 8px; }
+.ads-dots button { width: 9px; height: 9px; padding: 0; border-radius: 5px; border: 0; background: var(--line-2); cursor: pointer; transition: width .3s ease, background .3s ease; }
+.ads-dots button[aria-current="true"] { width: 26px; background: var(--accent); }
+@media (prefers-reduced-motion: reduce) {
+  .ads-stage .ad { transition: opacity .3s ease; }
+  .ad-on .ad-float { animation: none; }
+}
+
 .hero { display: flex; flex-wrap: wrap; align-items: center; gap: 48px; padding-top: 64px; padding-bottom: 48px; }
 .hero-text { flex: 1 1 420px; display: flex; flex-direction: column; gap: 20px; }
 .hero h1 { margin: 0; font-family: var(--serif); font-size: clamp(34px, 5vw, 56px); line-height: 1.25; letter-spacing: .04em; }
@@ -216,9 +241,11 @@ button { cursor: pointer; }
   .nav a { white-space: nowrap; }
   .header-tools { margin-left: auto; }
   .search { width: 150px; }
-  .hero { padding-top: 32px; gap: 28px; }
-  .hero-arches .arch:nth-child(1), .hero-arches .arch:nth-child(3) { height: 180px; }
-  .hero-arches .arch:nth-child(2) { height: 240px; }
+  .hero-ads { padding-top: 18px; }
+  .ads-stage { aspect-ratio: 100 / 60; }
+  .ads-stage .ad { width: 86%; margin-left: -43%; }
+  .ads-stage .ad-prev { transform: translateX(-88%) scale(.8) rotateY(14deg); }
+  .ads-stage .ad-next { transform: translateX(88%) scale(.8) rotateY(-14deg); }
   .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 14px; }
   .size-guide { padding: 28px 20px; border-radius: 28px; }
   .checkout-side { position: static; }

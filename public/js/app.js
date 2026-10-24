@@ -1,6 +1,6 @@
 // 指尖造藝 前台（Preact + htm，免編譯）
 import { html, render, useState, useEffect, useMemo, useRef, useCallback } from '../vendor/preact-htm.module.js';
-import { SITE, SIZES, SHAPE_GROUPS, MOODS, PRICE_TIERS, ORDER_STATUS } from './config.js';
+import { SITE, SIZES, SHAPE_GROUPS, MOODS, PRICE_TIERS, ORDER_STATUS, HERO_ADS } from './config.js';
 import { PAGES, GLUE_PAGE, GUIDE_PAGE } from './pages.js';
 import { auth, watchUser, login, loginWithLine, loginWithToken, logout, watchProducts, watchMyOrders } from './firebase.js';
 
@@ -21,6 +21,9 @@ const isGlue = (p) => Boolean(SITE.glueKeyword) && String(p?.name || '').include
 // 果凍膠分大碼／小碼，借用 L、S 兩個庫存欄位（伺服器不用改）
 const glueStock = (p, key) => Number(p?.stock?.[key] || 0);
 const sizeLabel = (l) => (isGlue(l) ? GLUE_PAGE.sizes.find((s) => s.key === l.size)?.label || l.size : l.size);
+// 篩選的甲型可以是一個（點甲型按鈕）或多個（廣告「長梯＋超長梯」）
+const shapeMatches = (want, shape) => (Array.isArray(want) ? want.includes(shape) : want === shape);
+const shapeLabel = (want) => (Array.isArray(want) ? want.join('＋') : want);
 const isInAppBrowser = () => /Line\/|FBAN|FBAV|Instagram/i.test(navigator.userAgent);
 
 function parseRoute() {
@@ -184,7 +187,7 @@ function Home({ products, loading, query, filter, setFilter }) {
   const shapeCount = (s) => listed.filter((p) => p.shape === s).length;
   const filtered = newest.filter((p) => {
     if (query && !textOf(p).toLowerCase().includes(query.toLowerCase())) return false;
-    if (filter.shape && p.shape !== filter.shape) return false;
+    if (filter.shape && !shapeMatches(filter.shape, p.shape)) return false;
     if (filter.mood && !moodsOf(p).includes(filter.mood)) return false;
     if (filter.price && Number(p.price) !== filter.price) return false;
     if (filter.inStock && totalStock(p) === 0) return false;
@@ -192,26 +195,11 @@ function Home({ products, loading, query, filter, setFilter }) {
   });
   const sorted = filter.sort === 'price-asc' ? [...filtered].sort((a, b) => a.price - b.price)
     : filter.sort === 'price-desc' ? [...filtered].sort((a, b) => b.price - a.price) : filtered;
-  const featured = newest.filter((p) => firstImage(p) && totalStock(p) > 0).slice(0, 3);
   const pick = (patch) => { setFilter({ ...filter, ...patch }); setTimeout(() => document.getElementById('shop')?.scrollIntoView(), 30); };
-  const activeLabels = [filter.shape, MOODS.find((m) => m.key === filter.mood)?.label, filter.price && `NT$${filter.price}`, query && `「${query}」`].filter(Boolean);
+  const activeLabels = [filter.shape && shapeLabel(filter.shape), MOODS.find((m) => m.key === filter.mood)?.label, filter.price && `NT$${filter.price}`, query && `「${query}」`].filter(Boolean);
 
   return html`
-    <section class="container hero">
-      <div class="hero-text">
-        <div class="script" style="font-size:20px">Once upon a fingertip</div>
-        <h1>今天，<br />想當哪一位公主？</h1>
-        <p>3 分鐘貼上、隨時卸下。不用預約、不傷真甲，千金、甜妹、清冷仙氣，一週換一種心情也沒有壓力。</p>
-        <div class="chips">
-          <button class="btn btn-primary" onClick=${() => scrollToId('shop')}>開始挑款</button>
-          <button class="btn btn-ghost" onClick=${() => scrollToId('size')}>我該選哪個尺寸？</button>
-        </div>
-        <div class="trust"><span>每款皆手作</span><span>XS–L 四種尺寸</span><span>綠界安全付款</span></div>
-      </div>
-      <div class="hero-arches" aria-hidden="true">
-        ${[0, 1, 2].map((i) => html`<div class="arch">${featured[i] ? html`<${Photo} product=${featured[i]} alt="" />` : html`<div class="placeholder"><${NailIcon} /></div>`}</div>`)}
-      </div>
-    </section>
+    <${HeroAds} onPick=${(shapes) => pick({ shape: shapes.length > 1 ? shapes : shapes[0] })} />
 
     <section class="steps" aria-label="購買流程">
       <div class="container steps-inner">
@@ -287,6 +275,58 @@ function Home({ products, loading, query, filter, setFilter }) {
         <div class="size-cells size-cells-5" aria-label="S 尺寸（mm）">
           ${GUIDE_PAGE.fingers.map((f, i) => html`<div class="size-cell"><span class="muted" style="font-size:13px">${f}</span><strong>${GUIDE_PAGE.table.S[i]}</strong><span class="muted" style="font-size:12px">mm</span></div>`)}
         </div>
+      </div>
+    </section>`;
+}
+
+// 首頁輪播廣告：中間那張輕輕漂浮，兩側的斜放在後面，每 5 秒自動換下一張
+function HeroAds({ onPick }) {
+  const n = HERO_ADS.length;
+  const [active, setActive] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const touch = useRef(null);
+  const step = (d) => setActive((a) => (a + d + n) % n);
+  useEffect(() => {
+    if (paused || n < 2) return;
+    const t = setInterval(() => { if (!document.hidden) step(1); }, 5000);
+    return () => clearInterval(t);
+  }, [paused, n]);
+  const onTouchEnd = (e) => {
+    const x = touch.current;
+    touch.current = null;
+    if (x === null) return;
+    const dx = e.changedTouches[0].clientX - x;
+    if (Math.abs(dx) > 40) step(dx < 0 ? 1 : -1);
+  };
+  return html`
+    <section class="hero-ads" aria-roledescription="輪播" aria-label="精選甲型"
+      onMouseEnter=${() => setPaused(true)} onMouseLeave=${() => setPaused(false)}
+      onFocusIn=${() => setPaused(true)} onFocusOut=${() => setPaused(false)}
+      onTouchStart=${(e) => { touch.current = e.touches[0].clientX; }} onTouchEnd=${onTouchEnd}>
+      <h1 class="sr-only">${SITE.name}｜手作穿戴甲</h1>
+      <div class="ads-stage">
+        ${HERO_ADS.map((ad, i) => {
+          // 和目前這張的距離：0 是中間，-1／1 是左右兩側，其他藏在後面
+          let d = (i - active + n) % n;
+          if (d > n / 2) d -= n;
+          const pos = d === 0 ? 'on' : d === -1 ? 'prev' : d === 1 ? 'next' : 'off';
+          const label = `看${shapeLabel(ad.shapes)}款式`;
+          return html`
+            <button type="button" class=${`ad ad-${pos}`} aria-label=${label} aria-hidden=${pos === 'off'} tabindex=${pos === 'on' ? 0 : -1}
+              onClick=${() => (pos === 'on' ? onPick(ad.shapes) : setActive(i))}>
+              <span class="ad-float">
+                <img src=${`${ad.img}.webp`} srcset=${`${ad.img}-s.webp 720w, ${ad.img}.webp 1200w`} sizes="(max-width: 720px) 90vw, 760px"
+                  alt=${label} width="1200" height="800" loading=${i === 0 ? 'eager' : 'lazy'} />
+              </span>
+            </button>`;
+        })}
+      </div>
+      <div class="ads-nav">
+        <button type="button" class="ads-arrow" aria-label="上一張" onClick=${() => step(-1)}>‹</button>
+        <div class="ads-dots">
+          ${HERO_ADS.map((ad, i) => html`<button type="button" aria-label=${`第 ${i + 1} 張：${shapeLabel(ad.shapes)}`} aria-current=${i === active} onClick=${() => setActive(i)}></button>`)}
+        </div>
+        <button type="button" class="ads-arrow" aria-label="下一張" onClick=${() => step(1)}>›</button>
       </div>
     </section>`;
 }
@@ -444,6 +484,8 @@ function ProductPage({ id, products, loading, addToCart, glue, cart }) {
   const [photo, setPhoto] = useState(0);
   const [added, setAdded] = useState(false);
   useEffect(() => { setSize(firstOpen); setQty(1); setPhoto(0); setAdded(false); }, [id, firstOpen]);
+  // 從清單點進來時畫面會停在原本捲動的位置（看到的是下方推薦款），所以先捲回頂端看商品資訊
+  useEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }); }, [id]);
 
   if (loading) return html`<div class="container section"><div class="empty">載入中…</div></div>`;
   if (!p || p.status === 'N') return html`<div class="container section"><div class="empty">找不到這個款式，可能已經下架。<br /><a href="#/">回到首頁</a></div></div>`;
