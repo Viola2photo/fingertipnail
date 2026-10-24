@@ -193,8 +193,11 @@ function Home({ products, loading, query, filter, setFilter }) {
     if (filter.inStock && totalStock(p) === 0) return false;
     return true;
   });
+  // 預設：庫存數量多的款式排前面（一樣多時新款在前）
   const sorted = filter.sort === 'price-asc' ? [...filtered].sort((a, b) => a.price - b.price)
-    : filter.sort === 'price-desc' ? [...filtered].sort((a, b) => b.price - a.price) : filtered;
+    : filter.sort === 'price-desc' ? [...filtered].sort((a, b) => b.price - a.price)
+    : filter.sort === 'new' ? filtered
+    : [...filtered].sort((a, b) => totalStock(b) - totalStock(a));
   const pick = (patch) => { setFilter({ ...filter, ...patch }); setTimeout(() => document.getElementById('shop')?.scrollIntoView(), 30); };
   const activeLabels = [filter.shape && shapeLabel(filter.shape), MOODS.find((m) => m.key === filter.mood)?.label, filter.price && `NT$${filter.price}`, query && `「${query}」`].filter(Boolean);
 
@@ -242,7 +245,7 @@ function Home({ products, loading, query, filter, setFilter }) {
 
     <section id="shop" class="container section">
       <div class="section-head">
-        <div><div class="script">New this week</div><h2>${activeLabels.length ? '挑選結果' : '本週新款'}</h2></div>
+        <div><div class="script">${filter.sort === 'new' ? 'New this week' : 'Our picks'}</div><h2>${activeLabels.length ? '挑選結果' : filter.sort === 'new' ? '最新上架' : '精選款式'}</h2></div>
         <span class="muted">${sorted.length} 款</span>
       </div>
       <div class="toolbar">
@@ -254,7 +257,7 @@ function Home({ products, loading, query, filter, setFilter }) {
         <label class="chip chip-white" style="cursor:pointer"><input type="checkbox" checked=${filter.inStock} onChange=${(e) => setFilter({ ...filter, inStock: e.target.checked })} /> 只看有貨</label>
         <label class="sr-only" for="sort">排序</label>
         <select id="sort" value=${filter.sort || ''} onChange=${(e) => setFilter({ ...filter, sort: e.target.value })}>
-          <option value="">最新上架</option><option value="price-asc">價格低到高</option><option value="price-desc">價格高到低</option>
+          <option value="">推薦（現貨多的優先）</option><option value="new">最新上架</option><option value="price-asc">價格低到高</option><option value="price-desc">價格高到低</option>
         </select>
       </div>
       ${loading
