@@ -8,9 +8,21 @@ const BUNDLE_PRICE = 1000;
 const ADDON_KEYWORD = '果凍膠';
 const isAddon = (line) => String(line.name || '').includes(ADDON_KEYWORD);
 
-// 開幕活動：全館免運＋全面折扣（在任 4 件之後再打折）。活動結束把 enabled 改成 false，
-// 並同步修改前台 config.js 的 SITE.openingSale。活動期間優惠碼暫停，避免折太多。
-const OPENING_SALE = { enabled: true, rate: 0.9, name: '開幕全面 9 折', freeShipping: true, allowPromoCodes: false };
+// 開幕活動：全館免運＋件數優惠（取代任 4 件 1000）。果凍膠不打折、不算件數。
+// 1 件 9 折、任選 2 件 650、任選 3 件 600、4 件以上每件 200。活動期間優惠碼暫停。
+// 活動結束把 enabled 改成 false，並同步修改前台 config.js 的 SITE.openingSale 與公告。
+const OPENING_SALE = { enabled: true, singleRate: 0.9, setPrices: { 2: 650, 3: 600 }, perItemFrom: 4, perItemPrice: 200, freeShipping: true, allowPromoCodes: false };
+
+// 開幕活動的商品價（不含果凍膠）與折扣名稱
+function openingSalePrice(unitPrices, sale) {
+  const n = unitPrices.length;
+  const sum = unitPrices.reduce((a, b) => a + b, 0);
+  if (n === 0) return { price: 0, name: '' };
+  if (n === 1) return { price: Math.round(sum * sale.singleRate), name: `開幕單件 ${Math.round(sale.singleRate * 10)} 折` };
+  if (sale.setPrices[n]) return { price: sale.setPrices[n], name: `開幕任選 ${n} 件 ${sale.setPrices[n]} 元` };
+  if (n >= sale.perItemFrom) return { price: n * sale.perItemPrice, name: `開幕 ${sale.perItemFrom} 件以上每件 ${sale.perItemPrice} 元` };
+  return { price: sum, name: '' };
+}
 
 const PROMO_CODES = {
   VIP9: { type: 'percent', value: 0.9, name: 'VIP 專屬 9 折' },
@@ -26,8 +38,10 @@ function calculateTotals(lines, promoCode, sale = OPENING_SALE) {
   lines.filter((l) => !isAddon(l)).forEach((l) => { for (let i = 0; i < l.quantity; i++) unitPrices.push(l.price); });
   unitPrices.sort((a, b) => b - a);
 
-  // 任 4 件 1000：拿最貴的件數組成組合
-  const bundleCount = Math.floor(unitPrices.length / BUNDLE_SIZE);
+  const saleOn = Boolean(sale && sale.enabled);
+
+  // 任 4 件 1000：拿最貴的件數組成組合（開幕活動期間改用活動價，不另外算）
+  const bundleCount = saleOn ? 0 : Math.floor(unitPrices.length / BUNDLE_SIZE);
   let eventDiscount = 0;
   if (bundleCount > 0) {
     const bundled = unitPrices.slice(0, bundleCount * BUNDLE_SIZE).reduce((a, b) => a + b, 0);
@@ -35,12 +49,17 @@ function calculateTotals(lines, promoCode, sale = OPENING_SALE) {
   }
   const eventFreeShipping = bundleCount > 0;
 
-  const saleOn = Boolean(sale && sale.enabled);
   const shippingFee = (subtotal === 0 || eventFreeShipping || subtotal >= FREE_SHIPPING_THRESHOLD || (saleOn && sale.freeShipping)) ? 0 : SHIPPING_FEE;
 
   const afterBundle = subtotal - eventDiscount;
-  const saleDiscount = saleOn && afterBundle > 0 ? Math.round(afterBundle * (1 - sale.rate)) : 0;
-  const sale_ = saleOn ? { name: sale.name, rate: sale.rate } : null;
+  let saleDiscount = 0;
+  let sale_ = null;
+  if (saleOn) {
+    const { price, name } = openingSalePrice(unitPrices, sale);
+    // 活動價比原價貴時（例如 2 件都 300 元）照原價，不會多收
+    saleDiscount = Math.max(0, unitPrices.reduce((a, b) => a + b, 0) - price);
+    if (saleDiscount > 0) sale_ = { name };
+  }
 
   const code = String(promoCode || '').toUpperCase().trim();
   const promoAllowed = !saleOn || sale.allowPromoCodes;

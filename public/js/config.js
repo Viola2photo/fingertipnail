@@ -5,10 +5,10 @@ export const SITE = {
   name: '指尖造藝',
   tagline: 'Fingertip Atelier',
   contactEmail: 'viola.lomography@gmail.com',
-  announcement: '🎉 新開幕：全館免運 ・ 全面 9 折 ・ 任選 4 件 NT$1,000 再 9 折',
-  // 開幕活動（全館免運＋全面 9 折）：實際折扣在 functions/src/lib/pricing.js 的 OPENING_SALE，兩邊要一起改。
+  announcement: '🎉 新開幕全館免運 ・ 單件 9 折 ・ 任 2 件 $650 ・ 任 3 件 $600 ・ 4 件以上每件 $200',
+  // 開幕活動（全館免運＋件數優惠）：實際價格在 functions/src/lib/pricing.js 的 OPENING_SALE，兩邊要一起改。
   // 活動期間優惠碼暫停，購物車不顯示優惠碼欄位。活動結束改成 null，並把上面的公告改回來。
-  openingSale: { label: '開幕全面 9 折', freeShipping: true, allowPromoCodes: false },
+  openingSale: { freeShipping: true, allowPromoCodes: false },
   freeShippingThreshold: 1000,
   shippingFee: 60,
   // 果凍膠：建檔系統裡商品名稱含這個字的商品，會當成加購用的果凍膠（不顯示在款式清單）
