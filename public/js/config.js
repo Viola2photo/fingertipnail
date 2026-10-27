@@ -64,8 +64,6 @@ export const HERO_ADS = [
   { img: 'img/ads/ad-8', shapes: ['中橢圓'] },
 ];
 
-export const PRICE_TIERS = [300, 390, 450, 490, 590];
-
 export const ORDER_STATUS = {
   pending: ['待付款', 'chip-peach'],
   awaiting_payment: ['待繳費', 'chip-peach'],

@@ -125,6 +125,18 @@ button { cursor: pointer; }
 .shape-card { background: #fff; border: 1.5px solid var(--line); border-radius: 28px; padding: 24px; display: flex; flex-direction: column; gap: 14px; }
 .shape-card header { display: flex; gap: 14px; align-items: center; }
 .shape-card strong { font-size: 20px; display: block; }
+/* 首頁甲型／風格篩選：精簡兩排，手機可左右滑 */
+.filter-section { padding-top: 28px; padding-bottom: 0; }
+.filter-section + .section { padding-top: 40px; }
+.filter-panel { background: #fff; border: 1.5px solid var(--line); border-radius: 24px; padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; }
+.filter-row { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.filter-label { flex: none; width: 3em; font-family: var(--serif); font-weight: 700; letter-spacing: .08em; }
+.filter-chips { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; min-width: 0; padding: 2px; }
+.filter-chips::-webkit-scrollbar { display: none; }
+.filter-chips .chip { flex: none; white-space: nowrap; min-height: 36px; padding: 0 14px; }
+.filter-chips .chip-sm { min-height: 32px; font-size: 13px; }
+.filter-sub { padding-left: calc(3em + 14px); gap: 10px; }
+.filter-sub .filter-label { width: auto; font-family: inherit; font-weight: 400; font-size: 13px; letter-spacing: 0; }
 .sub-heading { margin: 28px 0 12px; font-family: var(--serif); font-size: 20px; letter-spacing: .06em; }
 
 /* 商品格 */
@@ -249,6 +261,10 @@ button { cursor: pointer; }
   .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 14px; }
   .size-guide { padding: 28px 20px; border-radius: 28px; }
   .checkout-side { position: static; }
+  .filter-panel { padding: 12px 12px; border-radius: 20px; }
+  .filter-row { gap: 10px; }
+  .filter-sub { padding-left: 0; }
+  .filter-sub .filter-label { display: none; }
 }
 
 /* 文字頁面：關於我們、退換貨政策 */
