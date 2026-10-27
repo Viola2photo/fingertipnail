@@ -1,6 +1,6 @@
 // 指尖造藝 前台（Preact + htm，免編譯）
 import { html, render, useState, useEffect, useMemo, useRef, useCallback } from '../vendor/preact-htm.module.js';
-import { SITE, SIZES, SHAPE_GROUPS, MOODS, PRICE_TIERS, ORDER_STATUS, HERO_ADS } from './config.js';
+import { SITE, SIZES, SHAPE_GROUPS, MOODS, ORDER_STATUS, HERO_ADS } from './config.js';
 import { PAGES, GLUE_PAGE, GUIDE_PAGE } from './pages.js';
 import { auth, watchUser, login, loginWithLine, loginWithToken, logout, watchProducts, watchMyOrders } from './firebase.js';
 
@@ -119,8 +119,7 @@ function Header({ cartCount, onCart, onLogin, user, query, setQuery }) {
         <nav class="nav" aria-label="主選單">
           <a href="#/" onClick=${(e) => { e.preventDefault(); scrollToId('shop'); }}>新品上架</a>
           <a href="#/glue" class="nav-glue">果凍膠</a>
-          <a href="#/" onClick=${(e) => { e.preventDefault(); scrollToId('shapes'); }}>依甲型挑選</a>
-          <a href="#/" onClick=${(e) => { e.preventDefault(); scrollToId('moods'); }}>依風格挑選</a>
+          <a href="#/" onClick=${(e) => { e.preventDefault(); scrollToId('shapes'); }}>甲型／風格</a>
           <a href="#/guide">尺寸與工藝</a>
           <a href="#/orders">我的訂單</a>
         </nav>
@@ -189,7 +188,6 @@ function Home({ products, loading, query, filter, setFilter }) {
     if (query && !textOf(p).toLowerCase().includes(query.toLowerCase())) return false;
     if (filter.shape && !shapeMatches(filter.shape, p.shape)) return false;
     if (filter.mood && !moodsOf(p).includes(filter.mood)) return false;
-    if (filter.price && Number(p.price) !== filter.price) return false;
     if (filter.inStock && totalStock(p) === 0) return false;
     return true;
   });
@@ -199,47 +197,49 @@ function Home({ products, loading, query, filter, setFilter }) {
     : filter.sort === 'new' ? filtered
     : [...filtered].sort((a, b) => totalStock(b) - totalStock(a));
   const pick = (patch) => { setFilter({ ...filter, ...patch }); setTimeout(() => document.getElementById('shop')?.scrollIntoView(), 30); };
-  const activeLabels = [filter.shape && shapeLabel(filter.shape), MOODS.find((m) => m.key === filter.mood)?.label, filter.price && `NT$${filter.price}`, query && `「${query}」`].filter(Boolean);
+  // 甲型分成短／中長／長三組：點組別看整組，再點下面的小標籤看單一甲型
+  const isGroup = (g) => Array.isArray(filter.shape) && filter.shape.length === g.shapes.length && g.shapes.every((s) => filter.shape.includes(s));
+  const openGroup = SHAPE_GROUPS.find((g) => isGroup(g) || g.shapes.includes(filter.shape));
+  const activeGroup = SHAPE_GROUPS.find(isGroup);
+  const setShape = (shape) => setFilter({ ...filter, shape });
+  const activeLabels = [filter.shape && (activeGroup ? activeGroup.label : shapeLabel(filter.shape)), MOODS.find((m) => m.key === filter.mood)?.label, query && `「${query}」`].filter(Boolean);
 
   return html`
     <${HeroAds} onPick=${(shapes) => pick({ shape: shapes.length > 1 ? shapes : shapes[0] })} />
 
     <section class="steps" aria-label="購買流程">
       <div class="container steps-inner">
-        <div class="step"><span class="step-num chip-pink">1</span><span><strong>挑一個風格</strong><span>依甲型或心情快速篩選</span></span></div>
+        <div class="step"><span class="step-num chip-pink">1</span><span><strong>挑一個風格</strong><span>依甲型或風格快速篩選</span></span></div>
         <div class="step"><span class="step-num chip-lav">2</span><span><strong>選你的尺寸</strong><span>XS／S／M／L，不確定看指南</span></span></div>
-        <div class="step"><span class="step-num chip-mint">3</span><span><strong>貼上就出門</strong><span>超商取貨，綠界線上付款</span></span></div>
+        <div class="step"><span class="step-num chip-mint">3</span><span><strong>貼上就出門</strong><span>超商取貨付款，多種線上付款方式</span></span></div>
       </div>
     </section>
 
-    <section id="shapes" class="container section">
-      <div class="section-head">
-        <div><div class="script">Choose your shape</div><h2>依甲型挑選</h2></div>
-        <p class="muted" style="margin:0">短甲日常好上手，長甲顯手指修長</p>
-      </div>
-      <div class="shape-groups">
-        ${SHAPE_GROUPS.map((g) => html`
-          <div class="shape-card">
-            <header>
-              <span class=${`step-num ${g.chip}`}><${NailIcon} size=${18} /></span>
-              <span><strong>${g.label}</strong><span class="muted" style="font-size:14px">${g.shapes.reduce((s, x) => s + shapeCount(x), 0)} 款 ・ ${g.note}</span></span>
-            </header>
-            <div class="chips">
-              ${g.shapes.filter((s) => shapeCount(s) > 0).map((s) => html`
-                <button class=${`chip ${g.chip}`} aria-pressed=${filter.shape === s} onClick=${() => pick({ shape: filter.shape === s ? '' : s })}>${s} ${shapeCount(s)}</button>`)}
+    <section id="shapes" class="container section filter-section">
+      <div class="filter-panel">
+        <div class="filter-row">
+          <span class="filter-label">甲型</span>
+          <div class="filter-chips">
+            <button class="chip chip-white" aria-pressed=${!filter.shape} onClick=${() => setShape('')}>全部</button>
+            ${SHAPE_GROUPS.map((g) => html`
+              <button class=${`chip ${g.chip}`} aria-pressed=${openGroup === g} onClick=${() => setShape(isGroup(g) ? '' : g.shapes)}>${g.label} ${g.shapes.reduce((n, x) => n + shapeCount(x), 0)}</button>`)}
+          </div>
+        </div>
+        ${openGroup && html`
+          <div class="filter-row filter-sub">
+            <span class="filter-label muted">${openGroup.note}</span>
+            <div class="filter-chips">
+              ${openGroup.shapes.filter((s) => shapeCount(s) > 0).map((s) => html`
+                <button class=${`chip chip-sm ${openGroup.chip}`} aria-pressed=${filter.shape === s} onClick=${() => setShape(filter.shape === s ? openGroup.shapes : s)}>${s} ${shapeCount(s)}</button>`)}
             </div>
-          </div>`)}
-      </div>
-    </section>
-
-    <section id="moods" class="container section" style="padding-top:48px">
-      <h2 class="sub-heading" style="margin-top:0">今天的心情是…</h2>
-      <div class="chips">
-        ${MOODS.map((m) => html`<button class=${`chip ${m.chip}`} aria-pressed=${filter.mood === m.key} onClick=${() => pick({ mood: filter.mood === m.key ? '' : m.key })}>${m.label} ・ ${m.hint}</button>`)}
-      </div>
-      <h3 class="sub-heading">依價位挑選</h3>
-      <div class="chips">
-        ${PRICE_TIERS.map((p) => html`<button class="chip chip-white" aria-pressed=${filter.price === p} onClick=${() => pick({ price: filter.price === p ? 0 : p })}>NT$${p}</button>`)}
+          </div>`}
+        <div class="filter-row">
+          <span class="filter-label">風格</span>
+          <div class="filter-chips">
+            <button class="chip chip-white" aria-pressed=${!filter.mood} onClick=${() => setFilter({ ...filter, mood: '' })}>全部</button>
+            ${MOODS.map((m) => html`<button class=${`chip ${m.chip}`} title=${m.hint} aria-pressed=${filter.mood === m.key} onClick=${() => setFilter({ ...filter, mood: filter.mood === m.key ? '' : m.key })}>${m.label}</button>`)}
+          </div>
+        </div>
       </div>
     </section>
 
