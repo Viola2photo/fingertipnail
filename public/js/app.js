@@ -462,7 +462,13 @@ function GluePage({ glue, cart, addToCart }) {
 
 function GuidePage() {
   const g = GUIDE_PAGE;
-  useEffect(() => window.scrollTo(0, 0), []);
+  // #/guide/table（商品頁「尺寸怎麼量？」）直接捲到尺寸參考表
+  useEffect(() => {
+    const el = location.hash.startsWith('#/guide/table') && document.getElementById('size-table');
+    // 扣掉固定在上方的選單高度（手機版選單較高），標題才不會被蓋住
+    const top = el ? el.getBoundingClientRect().top + window.scrollY - (document.querySelector('.header')?.offsetHeight || 0) - 12 : 0;
+    window.scrollTo(0, top);
+  }, []);
   return html`
     <section class="container section guide-page">
       <div class="section-head"><div><div class="script">${g.script}</div><h2>${g.title}</h2></div></div>
@@ -473,7 +479,7 @@ function GuidePage() {
         ${g.methods.map(([t, d]) => html`<div class="guide-method"><strong>${t}</strong><span>${d}</span></div>`)}
       </div>
 
-      <h3 class="guide-title">${g.tableTitle}</h3>
+      <h3 class="guide-title" id="size-table">${g.tableTitle}</h3>
       <div class="guide-table-wrap">
         <table class="guide-table">
           <thead><tr><th>尺寸</th>${g.fingers.map((f) => html`<th>${f}</th>`)}</tr></thead>
@@ -551,7 +557,7 @@ function ProductPage({ id, products, loading, addToCart, glue, cart }) {
           <div>
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
               <strong>選擇尺寸</strong>
-              <button class="link-btn" onClick=${() => go('/guide')}>尺寸怎麼量？</button>
+              <button class="link-btn" onClick=${() => { location.hash = '/guide/table'; }}>尺寸怎麼量？</button>
             </div>
             <div class="sizes" role="group" aria-label="尺寸">
               ${SIZES.map((s) => {
