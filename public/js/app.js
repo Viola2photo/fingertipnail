@@ -176,8 +176,19 @@ function InfoPage({ id }) {
 }
 
 // ---------- 首頁 ----------
+// 推薦排序用的抽籤號碼：每款抽一次 random^(1/庫存)，號碼大的排前面。
+// 庫存 20 件的款式被排在庫存 2 件款式前面的機率約 91%，所以現貨多的大多在前，但不是固定順序。
+// 號碼在同一次瀏覽中保持不變（切換篩選不會亂跳），重新整理網頁才會重抽。
+const pickKeys = new Map();
+const pickKey = (p) => {
+  const id = p.docId;
+  if (!pickKeys.has(id)) pickKeys.set(id, Math.random() ** (1 / Math.max(1, totalStock(p))));
+  return pickKeys.get(id);
+};
+
 function Home({ products, loading, query, filter, setFilter }) {
-  const listed = useMemo(() => products.filter((p) => p.status !== 'N' && !isGlue(p)), [products]);
+  // 首頁只列出還有庫存的款式（賣完的款式仍可從網址直接打開）
+  const listed = useMemo(() => products.filter((p) => p.status !== 'N' && !isGlue(p) && totalStock(p) > 0), [products]);
   const newest = useMemo(() => [...listed].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''))), [listed]);
   const newIds = useMemo(() => new Set(newest.slice(0, 12).map((p) => p.docId)), [newest]);
   const [visible, setVisible] = useState(24);
@@ -188,14 +199,13 @@ function Home({ products, loading, query, filter, setFilter }) {
     if (query && !textOf(p).toLowerCase().includes(query.toLowerCase())) return false;
     if (filter.shape && !shapeMatches(filter.shape, p.shape)) return false;
     if (filter.mood && !moodsOf(p).includes(filter.mood)) return false;
-    if (filter.inStock && totalStock(p) === 0) return false;
     return true;
   });
-  // 預設：庫存數量多的款式排前面（一樣多時新款在前）
+  // 預設「推薦」：依庫存加權隨機，庫存越多越容易排前面，但每次打開網站順序都不同
   const sorted = filter.sort === 'price-asc' ? [...filtered].sort((a, b) => a.price - b.price)
     : filter.sort === 'price-desc' ? [...filtered].sort((a, b) => b.price - a.price)
     : filter.sort === 'new' ? filtered
-    : [...filtered].sort((a, b) => totalStock(b) - totalStock(a));
+    : [...filtered].sort((a, b) => pickKey(b) - pickKey(a));
   const pick = (patch) => { setFilter({ ...filter, ...patch }); setTimeout(() => document.getElementById('shop')?.scrollIntoView(), 30); };
   // 甲型分成短／中長／長三組：點組別看整組，再點下面的小標籤看單一甲型
   const isGroup = (g) => Array.isArray(filter.shape) && filter.shape.length === g.shapes.length && g.shapes.every((s) => filter.shape.includes(s));
@@ -254,10 +264,9 @@ function Home({ products, loading, query, filter, setFilter }) {
           ${activeLabels.length > 0 && html`<button class="link-btn" onClick=${() => setFilter({ sort: filter.sort })}>清除篩選</button>`}
         </div>
         <span style="flex:1"></span>
-        <label class="chip chip-white" style="cursor:pointer"><input type="checkbox" checked=${filter.inStock} onChange=${(e) => setFilter({ ...filter, inStock: e.target.checked })} /> 只看有貨</label>
         <label class="sr-only" for="sort">排序</label>
         <select id="sort" value=${filter.sort || ''} onChange=${(e) => setFilter({ ...filter, sort: e.target.value })}>
-          <option value="">推薦（現貨多的優先）</option><option value="new">最新上架</option><option value="price-asc">價格低到高</option><option value="price-desc">價格高到低</option>
+          <option value="">推薦</option><option value="new">最新上架</option><option value="price-asc">價格低到高</option><option value="price-desc">價格高到低</option>
         </select>
       </div>
       ${loading
