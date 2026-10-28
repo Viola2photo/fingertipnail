@@ -14,8 +14,8 @@ export const SITE = {
   // 果凍膠：建檔系統裡商品名稱含這個字的商品，會當成加購用的果凍膠（不顯示在款式清單）
   glueKeyword: '果凍膠',
   // 尺寸對照表在 pages.js 的 GUIDE_PAGE.table
-  // LINE 登入：伺服器設定好 LINE_CHANNEL_ID／LINE_CHANNEL_SECRET 並部署後改成 true 才會出現按鈕
-  lineLogin: false,
+  // LINE 登入按鈕（伺服器需設定 LINE_CHANNEL_ID／LINE_CHANNEL_SECRET）；改成 false 可暫時隱藏
+  lineLogin: true,
   // 防詐騙提醒：顯示在頁尾與「我的訂單」
   antiFraud: '防詐騙提醒：指尖造藝不會用電話、LINE 或簡訊要求您操作 ATM、網路銀行、解除分期或取消定期扣款，也不會要求您提供信用卡資料。接到可疑來電請直接掛斷，撥打 165 反詐騙專線查證。',
 };
