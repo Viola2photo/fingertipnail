@@ -200,6 +200,7 @@ button { cursor: pointer; }
 .notice-mint { background: var(--mint); color: #234C3E; }
 .notice-peach { background: var(--peach); color: var(--peach-ink); }
 .notice-pink { background: var(--pink); color: var(--accent-dark); }
+.perks a { color: var(--accent-dark); text-decoration: underline; text-underline-offset: 3px; }
 .perks { border-top: 1px solid var(--line); padding-top: 16px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; text-align: center; font-size: 13px; color: var(--ink-2); }
 
 /* 購物車抽屜 */
@@ -330,6 +331,7 @@ button { cursor: pointer; }
 .guide-methods { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
 .guide-method { background: #fff; border: 1.5px dashed #E7A6C2; border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
 .guide-method strong { color: var(--accent-dark); }
+.guide-kit { display: block; width: 100%; max-width: 420px; height: auto; margin: 6px auto 0; border-radius: 16px; }
 .guide-method span { font-size: 15px; }
 .guide-table-wrap { overflow-x: auto; }
 .guide-table { width: 100%; min-width: 420px; border-collapse: collapse; text-align: center; background: #fff; border-radius: 12px; overflow: hidden; }
