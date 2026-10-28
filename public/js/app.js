@@ -36,6 +36,8 @@ function parseRoute() {
   if (hash.startsWith('/guide')) return { name: 'guide' };
   if (hash.startsWith('/about')) return { name: 'page', id: 'about' };
   if (hash.startsWith('/returns')) return { name: 'page', id: 'returns' };
+  if (hash.startsWith('/privacy')) return { name: 'page', id: 'privacy' };
+  if (hash.startsWith('/terms')) return { name: 'page', id: 'terms' };
   return { name: 'home' };
 }
 const go = (path) => { location.hash = path; window.scrollTo(0, 0); };
@@ -149,7 +151,7 @@ function Footer() {
         <div style="flex:1 1 200px"><strong>付款方式</strong>綠界 ECPay：信用卡、ATM 轉帳、超商代碼；超商取貨付款</div>
         <div style="flex:1 1 200px"><strong>配送方式</strong>7-ELEVEN／全家 超商取貨<br />${SITE.openingSale?.freeShipping ? '開幕期間全館免運' : `滿 ${money(SITE.freeShippingThreshold)} 免運，未滿運費 ${money(SITE.shippingFee)}`}</div>
         <div style="flex:1 1 200px"><strong>聯絡我們</strong><a href=${`mailto:${SITE.contactEmail}`}>${SITE.contactEmail}</a>
-          <div class="footer-links"><a href="#/about">關於我們</a><a href="#/returns">退換貨政策</a></div></div>
+          <div class="footer-links"><a href="#/about">關於我們</a><a href="#/returns">退換貨政策</a><a href="#/privacy">隱私權政策</a><a href="#/terms">服務條款</a></div></div>
       </div>
       <div class="container" style="font-size:12px;opacity:.8;padding-top:12px">${SITE.antiFraud}</div>
     </footer>`;
@@ -171,6 +173,7 @@ function InfoPage({ id }) {
           ${(sec.paras || []).map((t) => html`<p>${t}</p>`)}
           ${sec.items && html`<ul>${sec.items.map(item)}</ul>`}
         </div>`)}
+      ${id === 'privacy' && html`<p class="info-contact">個人資料相關請求請來信 <a href=${`mailto:${SITE.contactEmail}`}>${SITE.contactEmail}</a>。</p>`}
       ${id === 'returns' && html`<p class="info-contact">申請退換貨請來信 <a href=${`mailto:${SITE.contactEmail}`}>${SITE.contactEmail}</a>，並附上訂單編號。</p>`}
     </section>`;
 }
