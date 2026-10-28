@@ -148,6 +148,11 @@ export const GUIDE_PAGE = {
     L: [17, 13, 14, 13, 10],
   },
   sizeNotes: { S: '70%～80% 適用' },
+  // 每副穿戴甲附贈的工具包（圖：public/img/toolkit.webp）
+  kitTitle: '🎁 隨貨附贈工具包',
+  kitText: '每副穿戴甲都會附上工具包（如下圖），果凍膠為加強型。',
+  kitImg: 'img/toolkit.webp',
+  kitAlt: '隨貨附贈工具包：加強型果凍膠、磨甲棒、推棒',
   warning: '本館販售之穿戴甲為半手工光療甲片，淺色之甲片可修剪，選擇尺寸時請務必精確測量，並將上述因素列入考量，以免造成配戴不適。',
   stepsTitle: '🎨 職人級七道工序',
   steps: [

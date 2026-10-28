@@ -469,6 +469,10 @@ function GuidePage() {
       </div>
       <div class="notice notice-pink" style="margin-top:14px">⚠️ <strong>重要提醒：</strong>${g.warning}</div>
 
+      <h3 class="guide-title">${g.kitTitle}</h3>
+      <p>${g.kitText}</p>
+      <img class="guide-kit" src=${g.kitImg} alt=${g.kitAlt} loading="lazy" width="800" height="800" />
+
       <h3 class="guide-title">${g.stepsTitle}</h3>
       <ol class="guide-steps">
         ${g.steps.map(([t, d], i) => html`<li><span class="guide-num">${i + 1}</span><div><strong>${t}</strong><span>${d}</span></div></li>`)}
@@ -559,7 +563,7 @@ function ProductPage({ id, products, loading, addToCart, glue, cart }) {
 
           ${!isGlue(p) && html`<${GlueOffer} glue=${glue} cart=${cart} addToCart=${addToCart} />`}
 
-          <div class="perks"><span>綠界安全付款</span><span>超商取貨</span><span>手作出貨</span></div>
+          <div class="perks"><span>綠界安全付款</span><span>超商取貨</span><a href="#/guide">購買前需知</a></div>
         </div>
       </section>
 
