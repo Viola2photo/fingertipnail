@@ -178,6 +178,9 @@ function InfoPage({ id }) {
     </section>`;
 }
 
+// 商品頁尺寸按鈕不顯示確切件數，庫存在這個數字以下（含）顯示「快沒囉」
+const LOW_STOCK = 2;
+
 // ---------- 首頁 ----------
 // 推薦排序用的抽籤號碼：每款抽一次 random^(1/庫存)，號碼大的排前面。
 // 庫存 20 件的款式被排在庫存 2 件款式前面的機率約 91%，所以現貨多的大多在前，但不是固定順序。
@@ -554,7 +557,7 @@ function ProductPage({ id, products, loading, addToCart, glue, cart }) {
               ${SIZES.map((s) => {
                 const n = Number(p.stock?.[s] || 0);
                 return html`<button class="size-btn" disabled=${n === 0} aria-pressed=${size === s} onClick=${() => { setSize(s); setQty(1); setAdded(false); }}>
-                  <strong>${s}</strong><span>${n === 0 ? '售完' : n <= 3 ? `剩 ${n} 件` : '有現貨'}</span></button>`;
+                  <strong>${s}</strong><span>${n === 0 ? '售完' : n <= LOW_STOCK ? '快沒囉' : '有庫存'}</span></button>`;
               })}
             </div>
           </div>
