@@ -371,6 +371,8 @@
       // 盤點相關狀態
       const [scanQuery, setScanQuery] = useState('');
       const [scanShapeFilter, setScanShapeFilter] = useState('All');
+      const [scanSize, setScanSize] = useState('All'); // 依尺寸盤點：只顯示並盤點這個尺寸
+      const [scanShowZero, setScanShowZero] = useState(false); // 依尺寸時，是否也列出系統記 0 件的款
       const [scanModalItem, setScanModalItem] = useState(null);
       const [scanModalStock, setScanModalStock] = useState({ XS: 0, S: 0, M: 0, L: 0 });
       const [pendingScans, setPendingScans] = useState({});
@@ -556,6 +558,14 @@
         setScanModalStock(pendingScans[item.id] || { ...item.stock });
       };
 
+      // 依尺寸盤點：直接在清單上 +／− 或輸入該尺寸數量，其他尺寸維持原值
+      const setScanSizeCount = (item, size, n) => {
+        setPendingScans(prev => {
+          const base = prev[item.id] || { XS: 0, S: 0, M: 0, L: 0, ...item.stock };
+          return { ...prev, [item.id]: { ...base, [size]: Math.max(0, Number(n) || 0) } };
+        });
+      };
+
       const saveScanModal = () => {
         setPendingScans(prev => ({
           ...prev,
@@ -606,9 +616,11 @@
           const matchQuery = (i.id || '').toLowerCase().includes(scanQuery.toLowerCase()) || 
                              (i.name || '').toLowerCase().includes(scanQuery.toLowerCase());
           const matchShape = scanShapeFilter === 'All' || i.shape === scanShapeFilter;
-          return matchQuery && matchShape;
+          // 選了尺寸：預設只列系統記錄該尺寸有庫存、或這次已暫存過的款
+          const matchSize = scanSize === 'All' || scanShowZero || Number(i.stock?.[scanSize] || 0) > 0 || !!pendingScans[i.id];
+          return matchQuery && matchShape && matchSize;
         });
-      }, [inventory, scanQuery, scanShapeFilter]);
+      }, [inventory, scanQuery, scanShapeFilter, scanSize, scanShowZero, pendingScans]);
 
       // 識別款式處理函數
       const handleRecognizePhoto = async (file) => {
@@ -938,7 +950,7 @@
                       {['XS', 'S', 'M', 'L'].map(s => (
                         <div key={s} className="flex flex-col items-center flex-1 md:flex-none">
                           <span className="text-[10px] font-black text-gray-400 mb-1">{s}</span>
-                          <span className="bg-blue-50 text-blue-600 px-4 py-1.5 rounded-xl text-sm font-black border border-blue-100">{systemTotalStock[s]}</span>
+                          <span className={`px-4 py-1.5 rounded-xl text-sm font-black border ${scanSize === s ? 'bg-blue-600 text-white border-blue-600' : 'bg-blue-50 text-blue-600 border-blue-100'}`}>{systemTotalStock[s]}</span>
                         </div>
                       ))}
                     </div>
@@ -954,7 +966,26 @@
                     </button>
                   </div>
                   
-                  <ShapeFilter activeShape={scanShapeFilter} onShapeSelect={setScanShapeFilter} />
+                  <ShapeFilter activeShape={scanShapeFilter} onShapeSelect={setScanShapeFilter} className="!mb-1" />
+
+                  {/* 依尺寸盤點 */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-black text-gray-400 mr-1">尺寸</span>
+                    {['All', ...SIZES].map(s => (
+                      <button key={s} onClick={() => setScanSize(s)} aria-pressed={scanSize === s}
+                        className={`px-4 py-2 rounded-full font-black text-xs border transition-all ${scanSize === s ? (s === 'All' ? 'bg-gray-900 text-white border-gray-900 shadow-md' : 'bg-blue-600 text-white border-blue-600 shadow-md') : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}>
+                        {s === 'All' ? '全部尺寸' : s}
+                      </button>
+                    ))}
+                    {scanSize !== 'All' && (
+                      <label className="flex items-center gap-1.5 text-xs font-bold text-gray-500 ml-1 cursor-pointer">
+                        <input type="checkbox" checked={scanShowZero} onChange={e => setScanShowZero(e.target.checked)} /> 也列出系統記 0 件的款
+                      </label>
+                    )}
+                  </div>
+                  {scanSize !== 'All' && (
+                    <p className="text-[11px] font-bold text-gray-400">正在盤點 {scanSize}：共 {filteredScanInventory.length} 款，直接按 +／− 或輸入實際數量，其他尺寸不會變動。改完按下方「確認上傳」。</p>
+                  )}
 
                   <div className="space-y-3">
                     {filteredScanInventory.map(item => {
@@ -972,6 +1003,18 @@
                             <p className="text-[10px] font-black text-gray-400 mt-1">{item.id} · <span className="text-blue-500">{item.shape || '未設甲型'}</span></p>
                             {isPending && <p className="text-[10px] font-black text-green-600 mt-0.5">已暫存盤點數</p>}
                           </div>
+                          {scanSize !== 'All' ? (
+                            <div className="flex flex-col items-center" onClick={e => e.stopPropagation()}>
+                              <span className="text-[9px] font-black text-gray-400 mb-1">{scanSize}{isPending && Number(displayStock[scanSize]) !== Number(item.stock?.[scanSize] || 0) && <span className="text-gray-300">（原 {item.stock?.[scanSize] || 0}）</span>}</span>
+                              <div className={`flex items-center rounded-2xl border overflow-hidden ${isPending ? 'border-green-300 bg-green-50' : 'border-gray-200 bg-gray-50'}`}>
+                                <button aria-label={`${scanSize} 減一`} onClick={() => setScanSizeCount(item, scanSize, Number(displayStock[scanSize] || 0) - 1)} className="w-9 h-10 font-black text-gray-500 hover:bg-gray-200">−</button>
+                                <input type="number" inputMode="numeric" aria-label={`${item.id} ${scanSize} 盤點數量`} value={displayStock[scanSize] ?? 0}
+                                  onFocus={e => e.target.select()} onChange={e => setScanSizeCount(item, scanSize, e.target.value)}
+                                  className={`w-12 h-10 text-center bg-transparent font-black text-lg outline-none ${isPending ? 'text-green-700' : 'text-gray-700'}`} />
+                                <button aria-label={`${scanSize} 加一`} onClick={() => setScanSizeCount(item, scanSize, Number(displayStock[scanSize] || 0) + 1)} className="w-9 h-10 font-black text-gray-500 hover:bg-gray-200">+</button>
+                              </div>
+                            </div>
+                          ) : (
                           <div className="flex gap-2">
                             {['XS', 'S', 'M', 'L'].map(s => (
                               <div key={s} className="flex flex-col items-center">
@@ -982,6 +1025,7 @@
                               </div>
                             ))}
                           </div>
+                          )}
                         </div>
                       );
                     })}
