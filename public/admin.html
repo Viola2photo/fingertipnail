@@ -225,11 +225,12 @@
       return <span className={`inline-block text-xs font-bold px-2.5 py-1 rounded-full ${cls}`}>{label}</span>;
     }
 
-    function SizeCells({ stock }) {
+    function SizeCells({ stock, highlight }) {
       return SIZES.map(s => {
         const n = Number(stock?.[s] || 0);
         const cls = n === 0 ? 'bg-[#FCE4EE] text-[#A8325F]' : n === 1 ? 'bg-[#FFF0CC] text-[#6E5310]' : 'bg-[#EEF6F2] text-[#234C3E]';
-        return <span key={s} className={`inline-flex w-9 h-7 items-center justify-center rounded-lg text-sm font-bold ${cls}`} title={`${s}：${n} 件`}>{n}</span>;
+        const ring = highlight === s ? ' ring-2 ring-[#2B2230]' : '';
+        return <span key={s} className={`inline-flex w-9 h-7 items-center justify-center rounded-lg text-sm font-bold ${cls}${ring}`} title={`${s}：${n} 件`}>{n}</span>;
       });
     }
 
@@ -441,6 +442,7 @@
       const [q, setQ] = useState('');
       const [filter, setFilter] = useState(initialFilter || 'all');
       const [shape, setShape] = useState('');
+      const [size, setSize] = useState('');
       const [stockFor, setStockFor] = useState(null);
       const [editFor, setEditFor] = useState(null);
       useEffect(() => { if (initialFilter) setFilter(initialFilter); }, [initialFilter]);
@@ -449,12 +451,15 @@
         const t = totalStock(p);
         if (q && !`${p.id} ${p.name}`.toLowerCase().includes(q.toLowerCase())) return false;
         if (shape && p.shape !== shape) return false;
+        // 依尺寸：只列這個尺寸目前有庫存、且仍上架的款式（若選了「已下架」則看下架款）
+        if (size && (!(Number(p.stock?.[size]) > 0) || (p.status === 'N' && filter !== 'off'))) return false;
         if (filter === 'low') return p.status !== 'N' && t === 1;
         if (filter === 'soldout') return p.status !== 'N' && t === 0;
         if (filter === 'missing') return SIZES.some(s => !Number(p.stock?.[s]));
         if (filter === 'off') return p.status === 'N';
         return true;
-      }), [inventory, q, filter, shape]);
+      }), [inventory, q, filter, shape, size]);
+      const sizeCount = s => inventory.filter(p => p.status !== 'N' && (!shape || p.shape === shape) && Number(p.stock?.[s]) > 0).length;
 
       const filters = [['all', '全部'], ['low', '剩 1 件'], ['soldout', '全售完'], ['missing', '有尺寸缺貨'], ['off', '已下架']];
       return (
@@ -469,6 +474,9 @@
             {filters.map(([k, l]) => <button key={k} className={`chip ${filter === k ? 'chip-on' : ''}`} aria-pressed={filter === k} onClick={() => setFilter(k)}>{l}</button>)}
             <label className="sr-only" htmlFor="inv-shape">甲型</label>
             <select id="inv-shape" className="input w-auto rounded-full" value={shape} onChange={e => setShape(e.target.value)}><option value="">全部甲型</option>{NAIL_SHAPES.map(s => <option key={s}>{s}</option>)}</select>
+            <label className="sr-only" htmlFor="inv-size">依尺寸看有庫存的款式</label>
+            <select id="inv-size" className="input w-auto rounded-full" value={size} onChange={e => setSize(e.target.value)}><option value="">全部尺寸</option>{SIZES.map(s => <option key={s} value={s}>{s} 有庫存（{sizeCount(s)} 款）</option>)}</select>
+            <span className="text-sm muted">共 {rows.length} 款</span>
           </div>
           <div className="card overflow-x-auto">
             <div className="min-w-[860px]">
@@ -484,7 +492,7 @@
                   <span>{p.shape || '—'}</span>
                   <span>${p.price}</span>
                   <span className={p.cost ? '' : 'muted'}>{p.cost ? `$${p.cost}` : '未填'}</span>
-                  <span className="flex gap-1"><SizeCells stock={p.stock} /></span>
+                  <span className="flex gap-1"><SizeCells stock={p.stock} highlight={size} /></span>
                   <strong>{totalStock(p)}</strong>
                   <span className="flex gap-1 justify-end">
                     <button className="btn btn-ghost !min-h-[34px] !px-3" onClick={() => setStockFor(p)}>庫存</button>
