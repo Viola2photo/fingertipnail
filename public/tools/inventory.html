@@ -356,6 +356,8 @@
       const [drafts, setDrafts] = useState([]); 
       const csvInputRef = useRef(null);
       const draftPhotoInputRef = useRef({}); 
+      const folderInputRef = useRef(null); // 依資料夾自動配照片
+      const [folderProgress, setFolderProgress] = useState(null);
       
       const [editingItem, setEditingItem] = useState(null);
       const editMediaRef = useRef(null);
@@ -459,6 +461,8 @@
               const nextId = getNextStandardId(inventory, currentOffset++);
               return {
                 uid: `csv-${Date.now()}-${index}`,
+                // CSV 的「照片資料夾」欄：之後用「依資料夾自動配照片」把同名資料夾裡的照片放進這一款（不會存進資料庫）
+                photoKey: (row['照片資料夾'] || '').trim(),
                 formData: {
                   id: nextId,
                   name: row['款式名稱'] || row['名稱'] || '',
@@ -503,6 +507,44 @@
           showToast("圖片上傳失敗，請重試", "error");
         }
         e.target.value = '';
+      };
+
+      // 選一個大資料夾（裡面每款一個子資料夾，名稱對應 CSV 的「照片資料夾」欄），自動把照片壓縮上傳並放進對應草稿。
+      // 子資料夾裡的照片依檔名排序，第一張當封面（建議封面檔名用 01 開頭）。
+      const handleFolderMatch = async (e) => {
+        const files = Array.from(e.target.files || []).filter(f => /^image\//.test(f.type));
+        e.target.value = '';
+        if (!files.length) return;
+        const groups = {};
+        files.forEach(f => {
+          const parts = (f.webkitRelativePath || f.name).split('/');
+          const folder = parts.length > 1 ? parts[parts.length - 2] : '';
+          (groups[folder] = groups[folder] || []).push(f);
+        });
+        const targets = drafts.filter(d => d.photoKey && groups[d.photoKey]);
+        const missing = drafts.filter(d => d.photoKey && !groups[d.photoKey]).map(d => d.photoKey);
+        if (!targets.length) { showToast('找不到名稱相符的子資料夾，請確認 CSV「照片資料夾」欄', 'error'); return; }
+        const total = targets.reduce((n, d) => n + groups[d.photoKey].length, 0);
+        let done = 0, failed = 0;
+        setFolderProgress({ done, total });
+        const results = {};
+        for (const d of targets) {
+          const list = groups[d.photoKey].sort((a, b) => a.name.localeCompare(b.name, 'zh-Hant', { numeric: true }));
+          const media = [];
+          for (const f of list) {
+            try {
+              const compressedBase64 = await compressImage(f, 800);
+              const url = await uploadBase64ToStorage(compressedBase64, 'draft');
+              const features = media.length === 0 ? await extractImageFeatures(compressedBase64) : undefined;
+              media.push({ id: Math.random().toString(36).substr(2, 9), url, type: 'image', ...(features ? { features } : {}) });
+            } catch (err) { console.error(err); failed++; }
+            done++; setFolderProgress({ done, total });
+          }
+          results[d.uid] = media;
+        }
+        setDrafts(prev => prev.map(d => results[d.uid] ? { ...d, formData: { ...d.formData, media: [...d.formData.media, ...results[d.uid]] } } : d));
+        setFolderProgress(null);
+        showToast(`已配好 ${targets.length} 款、${done - failed} 張照片` + (failed ? `，${failed} 張失敗` : '') + (missing.length ? `；${missing.length} 款找不到資料夾` : ''), failed || missing.length ? 'info' : 'success');
       };
 
       const updateDraft = (uid, field, value) => { 
@@ -1112,14 +1154,22 @@
                           <h2 className="font-black text-xl mb-1">📋 待確認建檔清單 ({drafts.length})</h2>
                           <p className="text-xs text-gray-400 font-bold italic">請確認資訊無誤並新增照片，最後點擊底部按鈕完成同步</p>
                         </div>
-                        <button onClick={() => setDrafts([])} className="bg-white/10 hover:bg-red-500 hover:text-white px-6 py-2 rounded-xl text-xs font-black transition-all">放棄所有草稿</button>
+                        <div className="flex flex-wrap gap-2 justify-center">
+                          {drafts.some(d => d.photoKey) && (
+                            <button disabled={!!folderProgress} onClick={() => folderInputRef.current.click()} className="bg-blue-500 hover:bg-blue-600 disabled:opacity-60 text-white px-6 py-2 rounded-xl text-xs font-black transition-all">
+                              {folderProgress ? `照片上傳中 ${folderProgress.done}/${folderProgress.total}…` : '📁 依資料夾自動配照片'}
+                            </button>
+                          )}
+                          <input type="file" multiple webkitdirectory="" directory="" ref={folderInputRef} onChange={handleFolderMatch} className="hidden" />
+                          <button onClick={() => setDrafts([])} className="bg-white/10 hover:bg-red-500 hover:text-white px-6 py-2 rounded-xl text-xs font-black transition-all">放棄所有草稿</button>
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {drafts.map(d => (
                           <div key={d.uid} className="bg-white p-8 rounded-[3rem] shadow-sm border border-gray-100 space-y-6">
                             <div className="flex justify-between items-center">
-                              <span className="text-[10px] font-black bg-blue-50 text-blue-600 px-4 py-2 rounded-full border border-blue-100">AUTO-ID: {d.formData.id}</span>
+                              <span className="text-[10px] font-black bg-blue-50 text-blue-600 px-4 py-2 rounded-full border border-blue-100">AUTO-ID: {d.formData.id}{d.photoKey ? ` ・ 📁 ${d.photoKey}` : ''}</span>
                               <button onClick={() => setDrafts(drafts.filter(dr => dr.uid !== d.uid))} className="text-gray-300 hover:text-red-500 transition-colors">✕</button>
                             </div>
                             
