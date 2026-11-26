@@ -17,6 +17,9 @@ module.exports = async (req, res) => {
     { group: '物流', label: senderIssue ? `寄件人姓名與手機：${senderIssue}` : '寄件人姓名與手機（後台「出貨設定」）', ok: !senderIssue, needed: true },
     { group: '發票', label: ecpay.invoiceEnabled() ? '自動開立電子發票：開啟' : '自動開立電子發票：關閉', ok: ecpay.invoiceEnabled(), needed: false },
     { group: '發票', label: '發票特店編號與 HashKey／HashIV', ok: has('ECPAY_INVOICE_MERCHANT_ID') && has('ECPAY_INVOICE_HASH_KEY') && has('ECPAY_INVOICE_HASH_IV'), needed: production && ecpay.invoiceEnabled() },
+    { group: '通知信', label: has('RESEND_API_KEY') ? '寄信服務 RESEND_API_KEY：已設定' : '寄信服務 RESEND_API_KEY：未設定（不會寄任何通知信）', ok: has('RESEND_API_KEY'), needed: true },
+    { group: '通知信', label: `新訂單通知店家信箱 SHOP_NOTIFY_EMAIL：${ecpay.envValue('SHOP_NOTIFY_EMAIL') || '未設定'}`, ok: has('SHOP_NOTIFY_EMAIL'), needed: true },
+    { group: '通知信', label: `寄件人 MAIL_FROM：${ecpay.envValue('MAIL_FROM') || '指尖造藝 <hello@tiptipart.com>'}`, ok: true, needed: false },
     { group: '網址', label: `網站網址 SITE_URL：${ecpay.envValue('SITE_URL') || '未設定（使用目前網址）'}`, ok: has('SITE_URL'), needed: false },
     { group: '網址', label: `綠界通知網址：${ecpay.callbackBase(req)}`, ok: true, needed: false },
   ];

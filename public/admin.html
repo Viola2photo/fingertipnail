@@ -845,6 +845,7 @@
       });
       const issueInvoice = () => run('invoice', async () => { const r = await apiPost('/api/admin/order', { action: 'invoice', orderId: order.merchantTradeNo }); notify(`已開立電子發票 ${r.invoiceNo}`); });
       const queryTrade = () => run('query', async () => { const r = await apiPost('/api/admin/order', { action: 'query', orderId: order.merchantTradeNo }); setQuery(r.data); });
+      const resendMail = () => run('mail', async () => { const r = await apiPost('/api/admin/order', { action: 'mail', orderId: order.merchantTradeNo }); notify(r.results.length ? r.results.join('、') : '通知信都已寄過了'); });
       const queryShipment = () => run('lquery', async () => { const r = await apiPost('/api/admin/logistics', { action: 'query', orderId: order.merchantTradeNo }); setQuery(r.data); });
       const t = order.totals || {};
 
@@ -910,6 +911,18 @@
                 {order.invoiceError && !order.invoiceNo && <p className="text-sm text-red-700">開立失敗：{order.invoiceError}</p>}
                 {order.invoice && <p className="text-xs muted">顧客選擇：{{ cloud: '雲端發票', mobile: `手機條碼 ${order.invoice.carrierNum}`, donate: `捐贈（愛心碼 ${order.invoice.loveCode}）` }[order.invoice.type]}</p>}
                 {PAID.includes(order.status) && !order.invoiceNo && !(isCod(order) && !order.payment.collected) && <button className="btn btn-ghost w-full" disabled={!!busy} onClick={issueInvoice}>{busy === 'invoice' ? '開立中…' : '立即開立電子發票'}</button>}
+              </div>
+              <div className="space-y-2">
+                <h3 className="font-bold">通知信</h3>
+                <p className="text-sm">顧客信箱：{order.customerEmail || order.invoice?.email || <span className="muted">沒有填（不會寄給顧客）</span>}</p>
+                <ul className="text-xs space-y-1">
+                  {[['placedShop', '新訂單通知（店家）'], ['placedCustomer', '訂單成立（顧客）'], ['shipped', '出貨通知（顧客）']].map(([k, label]) => {
+                    const v = order.notify?.[k];
+                    return <li key={k}>{label}：{!v ? <span className="muted">未寄</span> : v === 'skipped' ? <span className="muted">沒有收件信箱</span> : `已寄出 ${fmtTime(v)}`}</li>;
+                  })}
+                </ul>
+                {order.notifyError && <p className="text-xs text-red-700">寄信失敗：{order.notifyError}</p>}
+                {PAID.includes(order.status) && <button className="btn btn-ghost w-full" disabled={!!busy} onClick={resendMail}>{busy === 'mail' ? '寄送中…' : '補寄通知信'}</button>}
               </div>
               <div className="space-y-2">
                 <h3 className="font-bold">綠界</h3>

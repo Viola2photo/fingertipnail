@@ -64,6 +64,9 @@ firebase deploy
 | `SITE_URL` | 參數 | 申請網址後填 `https://你的網域` |
 | `CALLBACK_BASE_URL` | 參數 | 一般維持 `-`（見下方「綠界 SKILL 注意事項」） |
 | `ADMIN_UIDS` | 參數 | 額外的後台帳號 UID |
+| `RESEND_API_KEY` | 金鑰 | Resend 寄信服務的 API Key（訂單通知信；`-` 則不寄信） |
+| `SHOP_NOTIFY_EMAIL` | 參數 | 有新訂單時通知店家的信箱 |
+| `MAIL_FROM` | 參數 | 通知信寄件人，預設 `指尖造藝 <hello@tiptipart.com>`（網域需先在 Resend 驗證） |
 
 **之後要填或修改金鑰：**
 
@@ -83,6 +86,18 @@ SENDER_CELLPHONE=09xxxxxxxx
 ```
 
 填完後到後台總覽按「查看設定」，會列出哪些已填、哪些還缺（不會顯示金鑰內容）。
+
+## 訂單通知信
+
+用 [Resend](https://resend.com) 從 `hello@tiptipart.com` 寄出（免費方案每月 3,000 封、每天 100 封）。程式在 `functions/src/lib/mail.js`：
+
+| 信 | 收件人 | 什麼時候寄 |
+|----|--------|-----------|
+| 新訂單通知 | 店家（`SHOP_NOTIFY_EMAIL`） | 信用卡付款成功，或取貨付款訂單成立 |
+| 訂單成立 | 顧客（結帳填的 Email） | 同上 |
+| 出貨通知 | 顧客 | 後台建立綠界物流單，或手動標記已出貨 |
+
+每封信寄出後記在訂單的 `notify`，不會重複寄；寄失敗時 `notifyPending=true`，每 10 分鐘的排程重寄（最多 5 次）。後台訂單詳情有「通知信」區塊與「補寄通知信」按鈕。設定步驟見 `docs/record/指南/訂單通知信設定步驟.md`。
 
 ## LINE 登入
 
@@ -129,6 +144,7 @@ LINE 會員的 uid 為 `line:<LINE userId>`；同一人用 Google 與 LINE 登�
 - [ ] 綠界後台更換過 HashKey／HashIV（舊倉庫曾公開過）
 - [ ] 填入正式金流、物流、發票帳號，`ECPAY_ENV=production`
 - [ ] 後台「查看設定」沒有紅色 ✕
+- [ ] 下一筆測試訂單，店家與顧客都收到通知信
 - [ ] 實際刷一筆小額，確認訂單、庫存、手續費、發票都正確，再到綠界後台退刷
 - [ ] 綁定自己的網址：Firebase Console → Hosting → 新增自訂網域；完成後設定 `SITE_URL`，並在 Authentication → 設定 → 授權網域加入新網址
 - [ ] Google Cloud Console 限制 Firebase 網頁金鑰只允許你的網域使用

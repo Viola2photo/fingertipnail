@@ -1,5 +1,6 @@
 // 排程工作（每 10 分鐘）：
 // 1. 已付款、待開立的訂單自動開立電子發票（SKILL：不要在 ReturnURL 裡做耗時工作）
+// 3. 重寄先前寄送失敗的訂單通知信
 // 2. 主動查詢久未付款的訂單（SKILL：ATM／超商逾期不會通知，建議排程查 QueryTradeInfo）
 //    - 綠界顯示已付款但我們漏收通知 → 補做付款成立
 //    - 交易未成立或繳費期限已過 → 自動取消（尚未扣庫存，不需退回）
@@ -8,6 +9,7 @@ const { ordersRef } = require('./lib/firebase');
 const { historyEntry, applyOrderUpdate } = require('./lib/orders');
 const { markOrderPaid, queryTrade } = require('./lib/payment');
 const { issueInvoice } = require('./lib/invoice');
+const { retryPendingNotifications } = require('./lib/mail');
 
 const PENDING_GRACE_MS = 2 * 60 * 60 * 1000; // 信用卡未完成付款，2 小時後查詢
 const MAX_INVOICE_ATTEMPTS = 5;
@@ -73,6 +75,7 @@ async function runMaintenance() {
   const log = [];
   await issuePendingInvoices(log);
   await reconcileUnpaid(log);
+  await retryPendingNotifications(log);
   return log;
 }
 

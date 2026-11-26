@@ -398,3 +398,71 @@ test('LINE 登入：next 只接受站內路徑', () => {
   assert.strictEqual(safeNext('https://evil.example'), '#/orders');
   assert.strictEqual(safeNext('#/x?a=<script>'), '#/orders');
 });
+
+test('通知信：下單寄給店家與顧客、出貨寄給顧客，不重複寄，寄失敗由排程重寄', async () => {
+  const mail = require('../src/lib/mail');
+  const { runMaintenance } = require('../src/maintenance');
+  await fakeFirebase.inventoryRef().doc('NAIL_0009').set({ id: 'NAIL_0009', name: '通知信測試款', price: 390, stock: { M: 5 } });
+  process.env.RESEND_API_KEY = 're_test';
+  process.env.SHOP_NOTIFY_EMAIL = 'shop@example.com';
+  const realFetch = global.fetch;
+  const mails = [];
+  let failMail = true;
+  global.fetch = async (url, opts) => {
+    if (String(url).startsWith('https://api.resend.com')) {
+      const body = JSON.parse(opts.body);
+      if (failMail) return { ok: false, status: 500, text: async () => 'down' };
+      mails.push(body);
+      return { ok: true, json: async () => ({ id: 'm1' }) };
+    }
+    return { ok: true, text: async () => '1|AllPayLogisticsID=LG777&CVSPaymentNo=C777&CVSValidationNo=V7' };
+  };
+  try {
+    // 寄信服務暫時故障：下單仍然成功，訂單標記待重寄
+    const res = mockRes();
+    await checkout(req({ items: [{ id: 'NAIL_0009', size: 'M', quantity: 1 }], name: '林小花', phone: '0955666777', store: STORE, paymentMethod: 'cod', invoice: { email: 'buyer@example.com' } }, { authorization: 'Bearer buyer-token' }), res);
+    assert.strictEqual(res.statusCode, 200, JSON.stringify(res.body));
+    const no = res.body.orderNo;
+    let order = (await fakeFirebase.ordersRef().doc(no).get()).data();
+    assert.strictEqual(order.customerEmail, 'buyer@example.com');
+    assert.strictEqual(order.notifyPending, true);
+    assert.strictEqual(mails.length, 0);
+
+    // 排程重寄
+    failMail = false;
+    await runMaintenance();
+    assert.deepStrictEqual(mails.map((m) => m.to[0]).sort(), ['buyer@example.com', 'shop@example.com']);
+    const shopMail = mails.find((m) => m.to[0] === 'shop@example.com');
+    assert.match(shopMail.subject, new RegExp(no));
+    assert.strictEqual(shopMail.reply_to, 'buyer@example.com');
+    assert.match(mails.find((m) => m.to[0] === 'buyer@example.com').html, /取貨付款/);
+    order = (await fakeFirebase.ordersRef().doc(no).get()).data();
+    assert.strictEqual(order.notifyPending, false);
+
+    // 再跑一次排程不會重複寄
+    await runMaintenance();
+    assert.strictEqual(mails.length, 2);
+
+    // 建立物流單 → 出貨通知
+    const ship = mockRes();
+    await adminLogistics(req({ action: 'create', orderId: no }, admin), ship);
+    assert.strictEqual(ship.statusCode, 200, JSON.stringify(ship.body));
+    assert.strictEqual(mails.length, 3);
+    assert.match(mails[2].subject, /已出貨/);
+    assert.match(mails[2].html, /C777/);
+
+    // 補寄：都寄過了就不再寄
+    const again = mockRes();
+    await adminOrder(req({ action: 'mail', orderId: no }, admin), again);
+    assert.strictEqual(again.statusCode, 200, JSON.stringify(again.body));
+    assert.strictEqual(mails.length, 3);
+
+    // 信件內容會跳脫 HTML
+    const msg = mail.buildMessage('placedCustomer', { ...order, customerInfo: { name: '<b>x</b>' } });
+    assert.ok(!msg.html.includes('<b>x</b>'));
+  } finally {
+    global.fetch = realFetch;
+    delete process.env.RESEND_API_KEY;
+    delete process.env.SHOP_NOTIFY_EMAIL;
+  }
+});

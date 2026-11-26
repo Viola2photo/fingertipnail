@@ -701,6 +701,7 @@ function Checkout({ cart, user, quote, promo, glue, addToCart }) {
     if (codNeedsLogin) return setError('超商取貨付款請先登入');
     if (!storeOk) return setError('請先選擇取貨門市');
     if (!validPickupName(form.name)) return setError('姓名請填證件上的姓名：中文 2～5 字，或英文 4～10 個字母');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(form.email || '').trim())) return setError('請填寫 Email，訂單與出貨通知會寄到這裡');
     setBusy(true);
     try {
       const res = await postJson('/api/checkout', {
@@ -737,7 +738,7 @@ function Checkout({ cart, user, quote, promo, glue, addToCart }) {
           <div class="fields">
             <label class="field">姓名（取貨核對用）<input required maxlength="20" autocomplete="name" value=${form.name} onInput=${set('name')} /><small>${form.name && !validPickupName(form.name) ? html`<span style="color:#B42318">請填證件上的姓名：中文 2～5 字，或英文 4～10 個字母</span>` : '請填證件上的姓名，取貨時店員會核對'}</small></label>
             <label class="field">手機號碼<input required type="tel" inputmode="numeric" pattern="09[0-9]{8}" placeholder="0912345678" autocomplete="tel" value=${form.phone} onInput=${set('phone')} /><small>09 開頭 10 碼，取貨通知用</small></label>
-            <label class="field">Email（選填）<input type="email" autocomplete="email" value=${form.email} onInput=${set('email')} /><small>方便我們聯絡你</small></label>
+            <label class="field">Email<input required type="email" autocomplete="email" value=${form.email} onInput=${set('email')} /><small>訂單成立與出貨時會寄信通知你</small></label>
           </div>
         </section>
 
