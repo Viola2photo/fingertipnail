@@ -3,6 +3,7 @@ const ecpay = require('../lib/ecpay');
 const { requireAdmin } = require('../lib/auth');
 const { db, inventoryRef, ordersRef, stockMovementsRef } = require('../lib/firebase');
 const { PAID_STATUSES, historyEntry, applyOrderUpdate } = require('../lib/orders');
+const { notifyOrder, mailEnabled } = require('../lib/mail');
 const { queryTrade } = require('../lib/payment');
 const { issueInvoice } = require('../lib/invoice');
 
@@ -53,6 +54,7 @@ module.exports = async (req, res) => {
       if (!['paid', 'shipping'].includes(order.status)) throw new Error('只有已付款的訂單可以出貨');
       await applyOrderUpdate(null, order, { status: 'shipped', manualTrackingNo: ecpay.cleanText(trackingNo, 50) },
         historyEntry('shipped', `手動標記已出貨${trackingNo ? `，追蹤編號 ${ecpay.cleanText(trackingNo, 50)}` : ''}`));
+      await notifyOrder(order.merchantTradeNo, ['shipped']);
     } else if (action === 'complete') {
       if (!['shipping', 'shipped'].includes(order.status)) throw new Error('只有已出貨的訂單可以標記完成');
       const now = new Date().toISOString();
@@ -90,6 +92,14 @@ module.exports = async (req, res) => {
         historyEntry(order.status, `收件人姓名由「${order.customerInfo?.name || ''}」改為「${name}」`));
     } else if (action === 'note') {
       await applyOrderUpdate(null, order, {}, historyEntry(order.status, text));
+    } else if (action === 'mail') {
+      // 補寄通知信：寄出這筆訂單目前狀態該寄、但還沒寄成功的信
+      if (!mailEnabled()) throw new Error('還沒設定寄信服務（RESEND_API_KEY），請看系統設定檢查');
+      if (!PAID_STATUSES.includes(order.status)) throw new Error('訂單成立（付款或選擇取貨付款）後才會寄通知信');
+      const fresh = { ...(order.notify || {}) };
+      Object.keys(fresh).forEach((k) => { if (fresh[k] === 'skipped') delete fresh[k]; });
+      await applyOrderUpdate(null, order, { notify: fresh });
+      return res.json({ results: await notifyOrder(order.merchantTradeNo) });
     } else if (action === 'query') {
       const data = await queryTrade(order.merchantTradeNo);
       // 用查到的手續費補齊財務資料

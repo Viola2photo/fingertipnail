@@ -12,6 +12,8 @@ const secrets = {
   ECPAY_INVOICE_HASH_IV: defineSecret('ECPAY_INVOICE_HASH_IV'),
   // LINE Developers → LINE Login channel → Basic settings 的 Channel secret（未申請請填 -）
   LINE_CHANNEL_SECRET: defineSecret('LINE_CHANNEL_SECRET'),
+  // Resend 寄信服務的 API Key（訂單通知信用；未申請請填 -，就不寄信）
+  RESEND_API_KEY: defineSecret('RESEND_API_KEY'),
 };
 
 const strings = {
@@ -30,6 +32,8 @@ const strings = {
     description: '綠界伺服器通知要打的網址；填 - 會自動使用 Cloud Functions 直連網址（避開 CDN，綠界建議）',
   }),
   LINE_CHANNEL_ID: defineString('LINE_CHANNEL_ID', { default: '-', description: 'LINE Login channel 的 Channel ID（數字；未申請請填 -）' }),
+  SHOP_NOTIFY_EMAIL: defineString('SHOP_NOTIFY_EMAIL', { default: '-', description: '有新訂單時要通知的店家信箱（填 - 不通知）' }),
+  MAIL_FROM: defineString('MAIL_FROM', { default: '指尖造藝 <hello@tiptipart.com>', description: '通知信的寄件人（網域需先在 Resend 驗證）' }),
   ADMIN_UIDS: defineString('ADMIN_UIDS', { default: '-', description: '額外的後台帳號 UID，以逗號分隔' }),
 };
 

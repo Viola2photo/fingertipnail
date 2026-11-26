@@ -2,6 +2,7 @@
 const ecpay = require('./ecpay');
 const { db, inventoryRef, ordersRef, stockMovementsRef } = require('./firebase');
 const { PAID_STATUSES, historyEntry, applyOrderUpdate } = require('./orders');
+const { notifyOrder } = require('./mail');
 
 // payment: { tradeNo, paymentType, paymentDate, tradeAmt, fee, simulated }
 // 取貨付款（paymentType 'COD'）也走這裡：下單即成立並扣庫存，但還沒收到錢，所以不記 paidAt、不開發票，
@@ -60,6 +61,8 @@ async function markOrderPaid(merchantTradeNo, payment, source) {
     applyOrderUpdate(tx, order, patch, historyEntry('paid', note));
     outcome = 'paid';
   });
+  // 訂單成立：寄信通知店家與顧客（寄信有 4 秒上限，失敗由排程重寄，不影響付款處理）
+  if (outcome === 'paid') await notifyOrder(merchantTradeNo, ['placedShop', 'placedCustomer']);
   return outcome;
 }
 

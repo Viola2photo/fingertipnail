@@ -64,6 +64,8 @@ module.exports = async (req, res) => {
       totals,
       totalAmount: totals.total,
       customerUid: user ? user.uid : null,
+      // 通知信寄到這裡：結帳填的 Email，沒填就用登入帳號的 Email
+      customerEmail: invoice.email || (user && user.email) || '',
       customerInfo: { name, phone, address: `[${store.subType}] ${store.name}（${store.address}）` },
       shipping: { method: 'CVS', ...store },
       invoice,

@@ -5,6 +5,7 @@ const { requireAdmin } = require('../lib/auth');
 const { ordersRef } = require('../lib/firebase');
 const { historyEntry, applyOrderUpdate } = require('../lib/orders');
 const { getSender, senderProblem } = require('../lib/shipping');
+const { notifyOrder } = require('../lib/mail');
 
 const PRINT_ENDPOINTS = {
   UNIMARTC2C: '/Express/PrintUniMartC2COrderInfo',
@@ -60,7 +61,9 @@ async function createShipment(req, order, cfg) {
   };
   await applyOrderUpdate(null, order, { status: 'shipping', logistics },
     historyEntry('shipping', `已建立綠界物流單 ${logistics.id}（寄貨編號 ${logistics.cvsPaymentNo}）`));
-  return { logistics };
+  // 寄出貨通知給顧客
+  const mail = await notifyOrder(order.merchantTradeNo, ['shipped']);
+  return { logistics, mail };
 }
 
 function printLabel(order, cfg) {
