@@ -148,7 +148,7 @@ function Footer() {
           <strong class="serif" style="font-size:22px;letter-spacing:.12em">${SITE.name}</strong>
           讓每一次打扮都沒有負擔，隨時換上最新流行。
         </div>
-        <div style="flex:1 1 200px"><strong>付款方式</strong>信用卡（綠界 ECPay）；7-ELEVEN／全家 超商取貨付款</div>
+        <div style="flex:1 1 200px"><strong>付款方式</strong>信用卡；7-ELEVEN／全家 超商取貨付款</div>
         <div style="flex:1 1 200px"><strong>配送方式</strong>7-ELEVEN／全家 超商取貨<br />${SITE.openingSale?.freeShipping ? '開幕期間全館免運' : `滿 ${money(SITE.freeShippingThreshold)} 免運，未滿運費 ${money(SITE.shippingFee)}`}</div>
         <div style="flex:1 1 200px"><strong>聯絡我們</strong><a href=${`mailto:${SITE.contactEmail}`}>${SITE.contactEmail}</a>
           <div class="footer-links"><a href="#/about">關於我們</a><a href="#/returns">退換貨政策</a><a href="#/privacy">隱私權政策</a><a href="#/terms">服務條款</a></div></div>
@@ -584,7 +584,7 @@ function ProductPage({ id, products, loading, addToCart, glue, cart }) {
 
           ${!isGlue(p) && html`<${GlueOffer} glue=${glue} cart=${cart} addToCart=${addToCart} />`}
 
-          <div class="perks"><span>綠界安全付款</span><span>超商取貨</span><a href="#/guide">購買前需知</a></div>
+          <div class="perks"><span>信用卡安全付款</span><span>超商取貨</span><a href="#/guide">購買前需知</a></div>
         </div>
       </section>
 
@@ -728,7 +728,7 @@ function Checkout({ cart, user, quote, promo, glue, addToCart }) {
     <form class="container checkout" onSubmit=${submit}>
       <div class="checkout-main">
         <h1 class="serif" style="margin:0;font-size:32px">結帳</h1>
-        ${isInAppBrowser() && html`<div class="notice notice-peach">你正在 LINE／Facebook／Instagram 的內建瀏覽器中，綠界付款可能會失敗。請點右上角「⋯」選擇「用預設瀏覽器開啟」後再結帳。</div>`}
+        ${isInAppBrowser() && html`<div class="notice notice-peach">你正在 LINE／Facebook／Instagram 的內建瀏覽器中，信用卡付款可能會失敗。請點右上角「⋯」選擇「用預設瀏覽器開啟」後再結帳。</div>`}
 
         <${GlueOffer} glue=${glue} cart=${cart} addToCart=${addToCart} />
 
@@ -755,7 +755,7 @@ function Checkout({ cart, user, quote, promo, glue, addToCart }) {
         <section class="panel">
           <h2>付款方式</h2>
           <div class="options">
-            <button type="button" class="option" aria-pressed=${payment === 'online'} onClick=${() => setPayment('online')}><strong>信用卡付款</strong><span>綠界 ECPay 安全刷卡</span></button>
+            <button type="button" class="option" aria-pressed=${payment === 'online'} onClick=${() => setPayment('online')}><strong>信用卡付款</strong><span>僅限信用卡，一次付清</span></button>
             <button type="button" class="option" aria-pressed=${payment === 'cod'} onClick=${() => setPayment('cod')}><strong>超商取貨付款</strong><span>到門市取貨時再付款（需登入）</span></button>
           </div>
           ${codNeedsLogin && html`<div class="notice notice-peach" style="margin-top:12px">
@@ -772,9 +772,9 @@ function Checkout({ cart, user, quote, promo, glue, addToCart }) {
         </div>
         <${Summary} cart=${cart} quote=${quote} />
         ${error && html`<div class="notice notice-pink" role="alert" style="margin-top:12px">${error}</div>`}
-        <button class="btn btn-primary" type="submit" style="width:100%;margin-top:16px" disabled=${busy || !!quote.error || quote.loading || codNeedsLogin}>${payment === 'cod' ? (busy ? '送出訂單中…' : '送出訂單（取貨付款）') : (busy ? '前往綠界付款…' : '前往綠界付款')}</button>
+        <button class="btn btn-primary" type="submit" style="width:100%;margin-top:16px" disabled=${busy || !!quote.error || quote.loading || codNeedsLogin}>${payment === 'cod' ? (busy ? '送出訂單中…' : '送出訂單（取貨付款）') : (busy ? '前往付款頁…' : '前往信用卡付款')}</button>
         <p class="muted" style="font-size:12px;text-align:center;margin:8px 0 0">送出訂單即表示你同意本店的<a href="#/returns" target="_blank">退換貨政策</a></p>
-        <p class="muted" style="font-size:12px;margin:10px 0 0">${payment === 'cod' ? '包裹到店後會有簡訊通知，請在期限內到門市付款取貨。' : '付款由綠界科技 ECPay 處理，本站不儲存信用卡資料。'}${!user ? ' 登入後下單可在「我的訂單」查看進度。' : ''}</p>
+        <p class="muted" style="font-size:12px;margin:10px 0 0">${payment === 'cod' ? '包裹到店後會有簡訊通知，請在期限內到門市付款取貨。' : '將前往安全的信用卡付款頁，本站不會儲存信用卡資料。'}${!user ? ' 登入後下單可在「我的訂單」查看進度。' : ''}</p>
       </aside>
     </form>`;
 }
