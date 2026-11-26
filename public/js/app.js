@@ -148,7 +148,7 @@ function Footer() {
           <strong class="serif" style="font-size:22px;letter-spacing:.12em">${SITE.name}</strong>
           讓每一次打扮都沒有負擔，隨時換上最新流行。
         </div>
-        <div style="flex:1 1 200px"><strong>付款方式</strong>綠界 ECPay：信用卡、ATM 轉帳、超商代碼；超商取貨付款</div>
+        <div style="flex:1 1 200px"><strong>付款方式</strong>信用卡（綠界 ECPay）；7-ELEVEN／全家 超商取貨付款</div>
         <div style="flex:1 1 200px"><strong>配送方式</strong>7-ELEVEN／全家 超商取貨<br />${SITE.openingSale?.freeShipping ? '開幕期間全館免運' : `滿 ${money(SITE.freeShippingThreshold)} 免運，未滿運費 ${money(SITE.shippingFee)}`}</div>
         <div style="flex:1 1 200px"><strong>聯絡我們</strong><a href=${`mailto:${SITE.contactEmail}`}>${SITE.contactEmail}</a>
           <div class="footer-links"><a href="#/about">關於我們</a><a href="#/returns">退換貨政策</a><a href="#/privacy">隱私權政策</a><a href="#/terms">服務條款</a></div></div>
@@ -227,7 +227,7 @@ function Home({ products, loading, query, filter, setFilter }) {
       <div class="container steps-inner">
         <div class="step"><span class="step-num chip-pink">1</span><span><strong>挑一個風格</strong><span>依甲型或風格快速篩選</span></span></div>
         <div class="step"><span class="step-num chip-lav">2</span><span><strong>選你的尺寸</strong><span>XS／S／M／L，不確定看指南</span></span></div>
-        <div class="step"><span class="step-num chip-mint">3</span><span><strong>貼上就出門</strong><span>超商取貨付款，多種線上付款方式</span></span></div>
+        <div class="step"><span class="step-num chip-mint">3</span><span><strong>貼上就出門</strong><span>超商取貨付款或信用卡付款</span></span></div>
       </div>
     </section>
 
@@ -755,7 +755,7 @@ function Checkout({ cart, user, quote, promo, glue, addToCart }) {
         <section class="panel">
           <h2>付款方式</h2>
           <div class="options">
-            <button type="button" class="option" aria-pressed=${payment === 'online'} onClick=${() => setPayment('online')}><strong>線上付款</strong><span>信用卡、ATM 轉帳、超商代碼</span></button>
+            <button type="button" class="option" aria-pressed=${payment === 'online'} onClick=${() => setPayment('online')}><strong>信用卡付款</strong><span>綠界 ECPay 安全刷卡</span></button>
             <button type="button" class="option" aria-pressed=${payment === 'cod'} onClick=${() => setPayment('cod')}><strong>超商取貨付款</strong><span>到門市取貨時再付款（需登入）</span></button>
           </div>
           ${codNeedsLogin && html`<div class="notice notice-peach" style="margin-top:12px">
@@ -863,7 +863,7 @@ function App() {
       ? `付款成功！訂單編號 ${params.get('no') || ''}，我們會盡快為你出貨。`
       : result === 'cod'
         ? `訂單 ${params.get('no') || ''} 已成立！我們會盡快出貨，包裹到店後請到門市付款取貨。`
-        : `訂單 ${params.get('no') || ''} 已建立。若選擇 ATM 或超商代碼，請在期限內完成繳費。`);
+        : `訂單 ${params.get('no') || ''} 已建立，尚未完成付款。可到「我的訂單」查看狀態。`);
     if (result === 'success' || result === 'cod') setCart([]);
     history.replaceState(null, '', `${location.pathname}#/orders`);
     setRoute({ name: 'orders' });
