@@ -42,7 +42,7 @@ module.exports = async (req, res) => {
     const { invoice, error } = normalizeInvoiceRequest(body.invoice, phone);
     if (error) return fail(res, 400, error);
 
-    // 付款方式：online＝綠界線上付款（信用卡／ATM／超商代碼）；cod＝超商取貨付款
+    // 付款方式：online＝綠界信用卡付款；cod＝超商取貨付款（ATM、超商代碼、超商條碼等不開放）
     const cod = body.paymentMethod === 'cod';
 
     // 有登入就把訂單同步到顧客的「我的訂單」（uid 由伺服器驗證 token 取得，不信任前端）
@@ -105,7 +105,8 @@ module.exports = async (req, res) => {
       PaymentInfoURL: `${callback}/api/ecpay/payment-info`,
       OrderResultURL: `${origin}/api/ecpay/result`,
       ClientBackURL: `${origin}/#/orders`,
-      ChoosePayment: 'ALL',
+      // 只開放信用卡一次付清；ATM／超商代碼／超商條碼等手續費不划算，店家決定不開放（2026-11-26）
+      ChoosePayment: 'Credit',
       EncryptType: '1',
       NeedExtraPaidInfo: 'N',
     };

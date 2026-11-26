@@ -69,6 +69,8 @@ test('結帳以資料庫價格計算金額，不採用前端金額', async () =>
   // 送出的 CheckMacValue 可被驗證
   assert.ok(ecpay.verifyCheckMacValue(res.body.fields, STAGE.hashKey, STAGE.hashIv));
   assert.match(res.body.action, /payment-stage\.ecpay\.com\.tw\/Cashier\/AioCheckOut\/V5$/);
+  // 只開放信用卡（ATM／超商代碼／超商條碼不開放）
+  assert.strictEqual(res.body.fields.ChoosePayment, 'Credit');
 });
 
 test('超過庫存或下架商品無法結帳', async () => {
